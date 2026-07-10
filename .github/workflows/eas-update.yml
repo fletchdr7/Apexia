@@ -10,6 +10,8 @@ name: EAS Update (OTA)
 # Create the token at https://expo.dev -> Account settings -> Access tokens.
 
 on:
+  # Manual trigger from the Actions tab (works even when no mobile/ files changed).
+  workflow_dispatch:
   push:
     branches:
       - main
