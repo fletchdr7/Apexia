@@ -61,7 +61,8 @@
         "@kingstinct/react-native-healthkit",
         {
           "NSHealthShareUsageDescription": "Apexia reads your steps, active energy, and body weight to personalize your coaching and dashboard.",
-          "NSHealthUpdateUsageDescription": "Apexia can save your logged workouts to Apple Health."
+          "NSHealthUpdateUsageDescription": "Apexia can save your logged workouts to Apple Health.",
+          "background": false
         }
       ]
     ],
