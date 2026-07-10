@@ -1,0 +1,120 @@
+import type {
+  FoodEntry,
+  Supplement,
+  SupplementLog,
+  UserProfile,
+  WorkoutEntry,
+} from '@/types';
+import { computeTargets } from '@/utils/nutrition';
+
+function isoAgo(hours: number): string {
+  return new Date(Date.now() - hours * 3_600_000).toISOString();
+}
+
+export const DEMO_PROFILE: UserProfile = (() => {
+  const base = {
+    sex: 'male' as const,
+    weightKg: 82,
+    heightCm: 180,
+    age: 34,
+    activityLevel: 'moderate' as const,
+    goal: 'recomp' as const,
+  };
+  return {
+    id: 'demo-user',
+    displayName: 'Alex',
+    sex: base.sex,
+    birthYear: new Date().getFullYear() - base.age,
+    heightCm: base.heightCm,
+    weightKg: base.weightKg,
+    targetWeightKg: 78,
+    activityLevel: base.activityLevel,
+    goal: base.goal,
+    weeklyWorkoutTarget: 4,
+    preferredActivities: ['gym', 'run', 'reformer_pilates'],
+    lifestyle: ['busy_job', 'kids'],
+    dietaryPreferences: ['high_protein'],
+    units: 'metric',
+    onboardedAt: new Date().toISOString(),
+    targets: computeTargets(base),
+  };
+})();
+
+export const DEMO_WORKOUTS: WorkoutEntry[] = [
+  {
+    id: 'w1',
+    type: 'gym',
+    title: 'Push day',
+    performedAt: isoAgo(20),
+    durationMin: 55,
+    intensity: 'hard',
+    caloriesBurned: 320,
+    source: 'manual',
+    exercises: [
+      { name: 'Bench press', sets: [{ reps: 8, weightKg: 70 }, { reps: 8, weightKg: 70 }, { reps: 6, weightKg: 75 }] },
+      { name: 'Overhead press', sets: [{ reps: 10, weightKg: 40 }, { reps: 8, weightKg: 42.5 }] },
+    ],
+  },
+  {
+    id: 'w2',
+    type: 'run',
+    title: 'Easy morning run',
+    performedAt: isoAgo(44),
+    durationMin: 32,
+    intensity: 'easy',
+    distanceKm: 5.4,
+    caloriesBurned: 360,
+    source: 'manual',
+  },
+  {
+    id: 'w3',
+    type: 'reformer_pilates',
+    title: 'Reformer flow',
+    performedAt: isoAgo(70),
+    durationMin: 45,
+    intensity: 'moderate',
+    caloriesBurned: 210,
+    source: 'manual',
+  },
+];
+
+export const DEMO_FOODS: FoodEntry[] = [
+  {
+    id: 'f1',
+    name: 'Greek yogurt + berries',
+    slot: 'breakfast',
+    loggedAt: isoAgo(6),
+    servings: 1,
+    source: 'search',
+    nutrients: { calories: 260, proteinG: 22, carbsG: 30, fatG: 6, fiberG: 4, sugarG: 18 },
+  },
+  {
+    id: 'f2',
+    name: 'Chicken, rice & greens plate',
+    slot: 'lunch',
+    loggedAt: isoAgo(2),
+    servings: 1,
+    source: 'plate_scan',
+    confidence: 0.82,
+    nutrients: { calories: 540, proteinG: 45, carbsG: 55, fatG: 14, fiberG: 6 },
+  },
+];
+
+export const DEMO_SUPPLEMENTS: Supplement[] = [
+  {
+    id: 's1',
+    name: 'Creatine Monohydrate',
+    form: 'powder',
+    servingSize: '5 g',
+    ingredients: [{ name: 'Creatine Monohydrate', amount: 5, unit: 'g' }],
+    purpose: 'Strength & power output',
+    benefits: ['Increases strength and lean mass', 'Improves recovery'],
+    cautions: ['Stay hydrated'],
+    timing: 'Any time daily',
+    goalFit: 0.95,
+  },
+];
+
+export const DEMO_SUPPLEMENT_LOGS: SupplementLog[] = [
+  { id: 'sl1', supplementId: 's1', supplementName: 'Creatine Monohydrate', takenAt: isoAgo(7), dose: '5 g' },
+];
