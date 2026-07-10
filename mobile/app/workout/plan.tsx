@@ -1,62 +1,67 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, Chip, Text } from '@/components';
-import { ACTIVITIES } from '@/constants/activities';
 import { EQUIPMENT_CATALOG } from '@/constants/equipment';
-import { generateWorkoutPlan } from '@/lib/api';
+import { MUSCLE_GROUPS } from '@/constants/muscles';
+import { generateWorkoutPlan, swapExercise, type EquipmentInput } from '@/lib/api';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
-import type { ExperienceLevel, WorkoutLocation, WorkoutPlan } from '@/types';
-import { estimateCaloriesBurned } from '@/utils/nutrition';
+import type { ExperienceLevel, PlannedExercise, WorkoutLocation, WorkoutPlan } from '@/types';
 import { experienceLabel } from '@/utils/strength';
 
 const DURATIONS = [20, 30, 45, 60, 75];
 
-function parseReps(reps: string): number {
-  const m = reps.match(/\d+/);
-  return m ? Number(m[0]) : 10;
-}
-function parseWeight(s?: string): number | undefined {
-  if (!s) return undefined;
-  const m = s.match(/\d+(\.\d+)?/);
-  return m ? Number(m[0]) : undefined;
-}
-
 export default function BuildWorkout() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, updateProfile, gymEquipmentIds, homeEquipmentIds, customEquipment, addWorkout } = useAppStore();
+  const { profile, updateProfile, gymEquipmentIds, homeEquipmentIds, customEquipment, setActivePlan } = useAppStore();
 
   const [location, setLocation] = useState<WorkoutLocation>('gym');
   const [duration, setDuration] = useState(45);
   const [experience, setExperience] = useState<ExperienceLevel>(profile?.experience ?? 'intermediate');
+  const [muscles, setMuscles] = useState<string[]>(['full_body']);
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
+  const [exercises, setExercises] = useState<PlannedExercise[]>([]);
   const [loading, setLoading] = useState(false);
+  const [swapFor, setSwapFor] = useState<number | null>(null);
+  const [swapOptions, setSwapOptions] = useState<PlannedExercise[]>([]);
+  const [swapLoading, setSwapLoading] = useState(false);
 
   const allEquip = useMemo(() => [...EQUIPMENT_CATALOG, ...customEquipment], [customEquipment]);
   const ids = location === 'gym' ? gymEquipmentIds : homeEquipmentIds;
   const equipForLocation = useMemo(() => allEquip.filter((e) => ids.includes(e.id)), [allEquip, ids]);
+  const equipInput = useMemo<EquipmentInput[]>(
+    () => equipForLocation.map((e) => ({ name: e.name, exampleExercises: e.exampleExercises, primaryMuscles: e.primaryMuscles })),
+    [equipForLocation],
+  );
+
+  const toggleMuscle = (id: string) => {
+    setMuscles((prev) => {
+      if (id === 'full_body') return ['full_body'];
+      const next = prev.includes(id) ? prev.filter((m) => m !== id) : [...prev.filter((m) => m !== 'full_body'), id];
+      return next.length ? next : ['full_body'];
+    });
+  };
 
   const generate = async () => {
     if (profile && experience !== profile.experience) updateProfile({ experience });
     setLoading(true);
     setPlan(null);
+    setSwapFor(null);
     try {
       const result = await generateWorkoutPlan({
         profile: profile ? { ...profile, experience } : null,
         location,
         durationMin: duration,
-        equipment: equipForLocation.map((e) => ({
-          name: e.name,
-          exampleExercises: e.exampleExercises,
-          primaryMuscles: e.primaryMuscles,
-        })),
+        muscleGroups: muscles,
+        equipment: equipInput,
       });
       setPlan(result);
+      setExercises(result.exercises);
     } catch {
       setPlan(null);
     } finally {
@@ -64,27 +69,55 @@ export default function BuildWorkout() {
     }
   };
 
-  const saveWorkout = () => {
-    if (!plan) return;
-    const weightKg = profile?.weightKg ?? 75;
-    addWorkout({
-      type: location,
-      title: plan.title,
-      performedAt: new Date().toISOString(),
-      durationMin: plan.durationMin,
-      intensity: 'moderate',
-      caloriesBurned: estimateCaloriesBurned(ACTIVITIES[location].met, weightKg, plan.durationMin),
-      source: 'coach',
-      notes: plan.notes,
-      exercises: plan.exercises.map((pe) => ({
-        name: pe.name,
-        sets: Array.from({ length: pe.sets }, () => ({
-          reps: parseReps(pe.reps),
-          weightKg: parseWeight(pe.suggestedWeight),
-        })),
-      })),
+  const updateExercise = (i: number, patch: Partial<PlannedExercise>) => {
+    setExercises((prev) => prev.map((ex, idx) => (idx === i ? { ...ex, ...patch } : ex)));
+  };
+  const move = (i: number, dir: -1 | 1) => {
+    setExercises((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
     });
-    router.replace('/(tabs)/workouts');
+  };
+  const remove = (i: number) => setExercises((prev) => prev.filter((_, idx) => idx !== i));
+
+  const openSwap = async (i: number) => {
+    if (swapFor === i) {
+      setSwapFor(null);
+      return;
+    }
+    setSwapFor(i);
+    setSwapOptions([]);
+    setSwapLoading(true);
+    try {
+      const opts = await swapExercise({
+        profile,
+        exercise: exercises[i].name,
+        muscles: exercises[i].muscles ?? muscles,
+        equipment: equipInput,
+      });
+      setSwapOptions(opts);
+    } catch {
+      setSwapOptions([]);
+    } finally {
+      setSwapLoading(false);
+    }
+  };
+  const applySwap = (i: number, alt: PlannedExercise) => {
+    setExercises((prev) =>
+      prev.map((ex, idx) =>
+        idx === i ? { ...alt, sets: ex.sets, reps: ex.reps, suggestedWeight: alt.suggestedWeight ?? ex.suggestedWeight } : ex,
+      ),
+    );
+    setSwapFor(null);
+  };
+
+  const start = () => {
+    if (!plan) return;
+    setActivePlan({ ...plan, exercises });
+    router.push('/workout/session');
   };
 
   return (
@@ -98,13 +131,22 @@ export default function BuildWorkout() {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
         <Text variant="label" color="textMuted" style={styles.lbl}>
           Where are you training?
         </Text>
         <View style={styles.rowWrap}>
           <Chip label="Gym" icon="business" selected={location === 'gym'} onPress={() => setLocation('gym')} />
           <Chip label="Home" icon="home" selected={location === 'home'} onPress={() => setLocation('home')} />
+        </View>
+
+        <Text variant="label" color="textMuted" style={styles.lbl}>
+          Muscle groups
+        </Text>
+        <View style={styles.rowWrap}>
+          {MUSCLE_GROUPS.map((m) => (
+            <Chip key={m.id} label={m.label} selected={muscles.includes(m.id)} onPress={() => toggleMuscle(m.id)} />
+          ))}
         </View>
 
         <Text variant="label" color="textMuted" style={styles.lbl}>
@@ -137,15 +179,6 @@ export default function BuildWorkout() {
               </Text>
             </Pressable>
           </View>
-          {equipForLocation.length === 0 ? (
-            <Text variant="caption" color="textMuted" style={{ marginTop: 6 }}>
-              No {location} equipment selected — we&apos;ll build a bodyweight session. Add equipment for more variety.
-            </Text>
-          ) : (
-            <Text variant="caption" color="textMuted" style={{ marginTop: 6 }} numberOfLines={2}>
-              {equipForLocation.map((e) => e.name).join(', ')}
-            </Text>
-          )}
         </Card>
 
         <Button
@@ -156,28 +189,24 @@ export default function BuildWorkout() {
           style={{ marginTop: 16 }}
         />
 
+        {loading ? (
+          <View style={{ alignItems: 'center', marginTop: 24 }}>
+            <ActivityIndicator color={theme.colors.brand} />
+            <Text color="textMuted" style={{ marginTop: 8 }}>
+              Building your {location} session…
+            </Text>
+          </View>
+        ) : null}
+
         {plan ? (
           <View style={{ marginTop: 20 }}>
             <Text variant="title">{plan.title}</Text>
             <Text color="textMuted" style={{ marginTop: 4 }}>
-              {plan.focus} · {plan.durationMin} min
+              {plan.focus} · {plan.durationMin} min · tap values to edit
             </Text>
 
-            {plan.warmup.length ? (
-              <Card style={{ marginTop: 12 }}>
-                <Text variant="label" style={{ marginBottom: 8 }}>
-                  Warm-up
-                </Text>
-                {plan.warmup.map((w, i) => (
-                  <Text key={i} color="textMuted" style={{ marginTop: 4 }}>
-                    • {w}
-                  </Text>
-                ))}
-              </Card>
-            ) : null}
-
-            {plan.exercises.map((ex, i) => (
-              <Card key={i} style={{ marginTop: 12 }}>
+            {exercises.map((ex, i) => (
+              <Card key={`${ex.name}-${i}`} style={{ marginTop: 12 }}>
                 <View style={styles.row}>
                   <View style={{ flex: 1 }}>
                     <Text variant="label">{ex.name}</Text>
@@ -188,53 +217,57 @@ export default function BuildWorkout() {
                       </Text>
                     ) : null}
                   </View>
-                  <View style={[styles.setsBadge, { backgroundColor: theme.colors.brandSoft }]}>
-                    <Text variant="label" style={{ color: theme.colors.brand }}>
-                      {ex.sets} × {ex.reps}
-                    </Text>
+                  <View style={styles.iconRow}>
+                    <IconBtn icon="arrow-up" onPress={() => move(i, -1)} disabled={i === 0} />
+                    <IconBtn icon="arrow-down" onPress={() => move(i, 1)} disabled={i === exercises.length - 1} />
+                    <IconBtn icon="swap-horizontal" onPress={() => openSwap(i)} active={swapFor === i} />
+                    <IconBtn icon="trash-outline" onPress={() => remove(i)} />
                   </View>
                 </View>
-                <View style={[styles.metaRow, { borderTopColor: theme.colors.border }]}>
-                  <Meta icon="barbell" label={ex.suggestedWeight ?? '—'} />
-                  {ex.restSec ? <Meta icon="timer" label={`${ex.restSec}s rest`} /> : null}
+
+                <View style={styles.editRow}>
+                  <Stepper label="Sets" value={ex.sets} onChange={(v) => updateExercise(i, { sets: v })} />
+                  <FieldInput label="Reps" value={ex.reps} onChangeText={(t) => updateExercise(i, { reps: t })} width={70} />
+                  <FieldInput
+                    label="Weight"
+                    value={ex.suggestedWeight ?? ''}
+                    onChangeText={(t) => updateExercise(i, { suggestedWeight: t })}
+                    width={110}
+                  />
                 </View>
-                {ex.notes ? (
-                  <Text variant="caption" color="textMuted" style={{ marginTop: 8 }}>
-                    {ex.notes}
-                  </Text>
+
+                {swapFor === i ? (
+                  <View style={[styles.swapBox, { borderTopColor: theme.colors.border }]}>
+                    <Text variant="caption" color="textMuted" style={{ marginBottom: 8 }}>
+                      Swap for another {(ex.muscles && ex.muscles[0]) || 'similar'} exercise:
+                    </Text>
+                    {swapLoading ? (
+                      <ActivityIndicator color={theme.colors.brand} />
+                    ) : swapOptions.length ? (
+                      swapOptions.map((alt, k) => (
+                        <Pressable key={k} onPress={() => applySwap(i, alt)} style={styles.swapOption}>
+                          <Ionicons name="repeat" size={16} color={theme.colors.brand} style={{ marginRight: 8 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text>{alt.name}</Text>
+                            {alt.equipment ? (
+                              <Text variant="caption" color="textFaint">
+                                {alt.equipment}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </Pressable>
+                      ))
+                    ) : (
+                      <Text variant="caption" color="textFaint">
+                        No alternatives found for your equipment.
+                      </Text>
+                    )}
+                  </View>
                 ) : null}
               </Card>
             ))}
 
-            {plan.cooldown.length ? (
-              <Card style={{ marginTop: 12 }}>
-                <Text variant="label" style={{ marginBottom: 8 }}>
-                  Cool-down
-                </Text>
-                {plan.cooldown.map((c, i) => (
-                  <Text key={i} color="textMuted" style={{ marginTop: 4 }}>
-                    • {c}
-                  </Text>
-                ))}
-              </Card>
-            ) : null}
-
-            {plan.notes ? (
-              <Text variant="caption" color="textFaint" style={{ marginTop: 12 }}>
-                {plan.notes}
-              </Text>
-            ) : null}
-
-            <Button label="Save to my workouts" icon="checkmark" onPress={saveWorkout} style={{ marginTop: 16 }} />
-          </View>
-        ) : null}
-
-        {loading ? (
-          <View style={{ alignItems: 'center', marginTop: 24 }}>
-            <ActivityIndicator color={theme.colors.brand} />
-            <Text color="textMuted" style={{ marginTop: 8 }}>
-              Building your {location} session…
-            </Text>
+            <Button label="Start workout" icon="play" onPress={start} style={{ marginTop: 20 }} disabled={exercises.length === 0} />
           </View>
         ) : null}
       </ScrollView>
@@ -242,14 +275,70 @@ export default function BuildWorkout() {
   );
 }
 
-function Meta({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
+function IconBtn({
+  icon,
+  onPress,
+  disabled,
+  active,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  disabled?: boolean;
+  active?: boolean;
+}) {
   const theme = useTheme();
   return (
-    <View style={styles.meta}>
-      <Ionicons name={icon} size={14} color={theme.colors.textMuted} style={{ marginRight: 5 }} />
-      <Text variant="caption" color="textMuted">
+    <Pressable onPress={onPress} disabled={disabled} hitSlop={6} style={{ padding: 6, opacity: disabled ? 0.3 : 1 }}>
+      <Ionicons name={icon} size={18} color={active ? theme.colors.brand : theme.colors.textMuted} />
+    </Pressable>
+  );
+}
+
+function Stepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  const theme = useTheme();
+  return (
+    <View>
+      <Text variant="caption" color="textMuted" style={{ marginBottom: 4 }}>
         {label}
       </Text>
+      <View style={[styles.stepper, { borderColor: theme.colors.border }]}>
+        <Pressable onPress={() => onChange(Math.max(1, value - 1))} hitSlop={6} style={styles.stepBtn}>
+          <Ionicons name="remove" size={16} color={theme.colors.text} />
+        </Pressable>
+        <Text variant="label" style={{ minWidth: 20, textAlign: 'center' }}>
+          {value}
+        </Text>
+        <Pressable onPress={() => onChange(Math.min(10, value + 1))} hitSlop={6} style={styles.stepBtn}>
+          <Ionicons name="add" size={16} color={theme.colors.text} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function FieldInput({
+  label,
+  value,
+  onChangeText,
+  width,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (t: string) => void;
+  width: number;
+}) {
+  const theme = useTheme();
+  return (
+    <View>
+      <Text variant="caption" color="textMuted" style={{ marginBottom: 4 }}>
+        {label}
+      </Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        style={[styles.field, { width, color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.card }]}
+        placeholderTextColor={theme.colors.textFaint}
+      />
     </View>
   );
 }
@@ -259,7 +348,11 @@ const styles = StyleSheet.create({
   lbl: { marginTop: 20, marginBottom: 10 },
   rowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  setsBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
-  metaRow: { flexDirection: 'row', gap: 16, marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
-  meta: { flexDirection: 'row', alignItems: 'center' },
+  iconRow: { flexDirection: 'row', alignItems: 'center' },
+  editRow: { flexDirection: 'row', gap: 14, marginTop: 12, alignItems: 'flex-end' },
+  stepper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 4, height: 40 },
+  stepBtn: { padding: 8 },
+  field: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, height: 40 },
+  swapBox: { marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
+  swapOption: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
 });

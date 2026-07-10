@@ -123,11 +123,18 @@ export async function analyzeEquipmentPhoto(imageBase64: string): Promise<Equipm
 // Workout plan builder
 // ---------------------------------------------------------------------------
 
+export interface EquipmentInput {
+  name: string;
+  exampleExercises?: string[];
+  primaryMuscles?: string[];
+}
+
 export interface WorkoutPlanParams {
   profile: UserProfile | null;
   location: WorkoutLocation;
   durationMin: number;
-  equipment: { name: string; exampleExercises?: string[]; primaryMuscles?: string[] }[];
+  muscleGroups: string[];
+  equipment: EquipmentInput[];
 }
 
 export async function generateWorkoutPlan(params: WorkoutPlanParams): Promise<WorkoutPlan> {
@@ -136,13 +143,60 @@ export async function generateWorkoutPlan(params: WorkoutPlanParams): Promise<Wo
       profile: params.profile,
       location: params.location,
       durationMin: params.durationMin,
+      muscleGroups: params.muscleGroups,
       equipment: params.equipment,
     });
   }
   return localWorkoutPlan(params);
 }
 
-function localWorkoutPlan({ profile, location, durationMin, equipment }: WorkoutPlanParams): WorkoutPlan {
+export interface SwapExerciseParams {
+  profile: UserProfile | null;
+  exercise: string;
+  muscles: string[];
+  equipment: EquipmentInput[];
+}
+
+/** Returns alternative exercises for the same muscle group from available equipment. */
+export async function swapExercise(params: SwapExerciseParams): Promise<PlannedExercise[]> {
+  if (config.hasAiBackend) {
+    const res = await post<{ alternatives: PlannedExercise[] }>('/coach/swap', {
+      profile: params.profile,
+      exercise: params.exercise,
+      muscles: params.muscles,
+      equipment: params.equipment,
+    });
+    return res.alternatives ?? [];
+  }
+  return localSwaps(params);
+}
+
+function localSwaps({ profile, exercise, muscles, equipment }: SwapExerciseParams): PlannedExercise[] {
+  const scheme = repSchemeForGoal(profile?.goal ?? 'maintain');
+  const target = muscles.map((m) => m.toLowerCase());
+  const pool: PlannedExercise[] = [];
+  for (const e of equipment) {
+    const matches = target.length === 0 || (e.primaryMuscles ?? []).some((m) => target.some((t) => m.toLowerCase().includes(t) || t.includes(m.toLowerCase())));
+    if (!matches) continue;
+    for (const ex of e.exampleExercises ?? [e.name]) {
+      if (ex.toLowerCase() === exercise.toLowerCase()) continue;
+      pool.push({
+        name: ex,
+        equipment: e.name,
+        sets: scheme.sets,
+        reps: scheme.reps,
+        restSec: scheme.restSec,
+        muscles: e.primaryMuscles,
+        suggestedWeight: e.name.toLowerCase() === 'bodyweight' ? 'bodyweight' : 'moderate',
+      });
+    }
+  }
+  // de-dup by name
+  const seen = new Set<string>();
+  return pool.filter((p) => (seen.has(p.name) ? false : (seen.add(p.name), true))).slice(0, 6);
+}
+
+function localWorkoutPlan({ profile, location, durationMin, muscleGroups, equipment }: WorkoutPlanParams): WorkoutPlan {
   const goal = profile?.goal ?? 'maintain';
   const scheme = repSchemeForGoal(goal);
   const experience = profile?.experience ?? 'beginner';
@@ -150,8 +204,14 @@ function localWorkoutPlan({ profile, location, durationMin, equipment }: Workout
   const sexFactor = profile?.sex === 'female' ? 0.7 : 1;
   const slots = Math.max(3, Math.min(8, Math.floor((durationMin - 10) / 7)));
 
+  const wantsAll = muscleGroups.length === 0 || muscleGroups.includes('full_body');
+  const targets = muscleGroups.map((m) => m.toLowerCase());
+  const matchesMuscle = (muscles?: string[]) =>
+    wantsAll || (muscles ?? []).some((m) => targets.some((t) => m.toLowerCase().includes(t) || t.includes(m.toLowerCase())));
+
   const pool: { name: string; equipment: string; muscles?: string[] }[] = [];
   for (const e of equipment) {
+    if (!matchesMuscle(e.primaryMuscles)) continue;
     const exercises = e.exampleExercises && e.exampleExercises.length ? e.exampleExercises : [e.name];
     for (const ex of exercises) pool.push({ name: ex, equipment: e.name, muscles: e.primaryMuscles });
   }

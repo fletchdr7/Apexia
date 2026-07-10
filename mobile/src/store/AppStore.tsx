@@ -9,6 +9,7 @@ import type {
   UserProfile,
   WorkoutEntry,
   WorkoutLocation,
+  WorkoutPlan,
 } from '@/types';
 import { isSameDay } from '@/utils/date';
 import { uid } from '@/utils/id';
@@ -56,6 +57,9 @@ interface AppStoreValue extends PersistedState {
   snapshot: SyncableState;
   hydrate: (next: SyncableState) => void;
   setGuestMode: (value: boolean) => void;
+  /** Transient plan being run in an active workout session (not persisted). */
+  activePlan: WorkoutPlan | null;
+  setActivePlan: (plan: WorkoutPlan | null) => void;
   // profile
   setProfile: (profile: UserProfile) => void;
   updateProfile: (patch: Partial<UserProfile>) => void;
@@ -110,6 +114,7 @@ const AppStoreContext = createContext<AppStoreValue | null>(null);
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedState>(initialState);
   const [ready, setReady] = useState(false);
+  const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -277,6 +282,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       snapshot,
       hydrate,
       setGuestMode,
+      activePlan,
+      setActivePlan,
       setProfile,
       updateProfile,
       resetAll,
@@ -300,6 +307,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       snapshot,
       hydrate,
       setGuestMode,
+      activePlan,
       setProfile,
       updateProfile,
       resetAll,
