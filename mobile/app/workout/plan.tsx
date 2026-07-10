@@ -12,6 +12,7 @@ import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { ExperienceLevel, PlannedExercise, WorkoutLocation, WorkoutPlan } from '@/types';
 import { exerciseKey, experienceLabel, progressionFor } from '@/utils/strength';
+import { formatPlannedWeight } from '@/utils/units';
 
 const DURATIONS = [20, 30, 45, 60, 75];
 
@@ -20,6 +21,7 @@ export default function BuildWorkout() {
   const router = useRouter();
   const { profile, updateProfile, gymEquipmentIds, homeEquipmentIds, customEquipment, exerciseHistory, setActivePlan } =
     useAppStore();
+  const units = profile?.units ?? 'imperial';
 
   const [location, setLocation] = useState<WorkoutLocation>('gym');
   const [duration, setDuration] = useState(45);
@@ -46,7 +48,7 @@ export default function BuildWorkout() {
     list.map((ex) => {
       const rec = exerciseHistory[exerciseKey(ex.name)];
       if (!rec) return ex;
-      const p = progressionFor(rec, ex.reps);
+      const p = progressionFor(rec, ex.reps, units);
       return {
         ...ex,
         suggestedWeight: p.suggestedWeight ?? ex.suggestedWeight,
@@ -76,7 +78,11 @@ export default function BuildWorkout() {
         equipment: equipInput,
       });
       setPlan(result);
-      setExercises(applyHistory(result.exercises));
+      const displayed = result.exercises.map((ex) => ({
+        ...ex,
+        suggestedWeight: formatPlannedWeight(ex.suggestedWeight, units),
+      }));
+      setExercises(applyHistory(displayed));
     } catch {
       setPlan(null);
     } finally {
@@ -124,7 +130,8 @@ export default function BuildWorkout() {
     setExercises((prev) =>
       prev.map((ex, idx) => {
         if (idx !== i) return ex;
-        const merged = { ...alt, sets: ex.sets, reps: ex.reps, suggestedWeight: alt.suggestedWeight ?? ex.suggestedWeight };
+        const displayWeight = alt.suggestedWeight ? formatPlannedWeight(alt.suggestedWeight, units) : ex.suggestedWeight;
+        const merged = { ...alt, sets: ex.sets, reps: ex.reps, suggestedWeight: displayWeight };
         return applyHistory([merged])[0];
       }),
     );

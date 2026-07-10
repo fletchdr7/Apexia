@@ -10,6 +10,7 @@ import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { PlannedExercise, StrengthExercise } from '@/types';
 import { estimateCaloriesBurned } from '@/utils/nutrition';
+import { displayToKg, unitLabel } from '@/utils/units';
 
 interface SetRow {
   reps: string;
@@ -60,6 +61,7 @@ export default function WorkoutSession() {
   }
 
   const plan = activePlan;
+  const units = profile?.units ?? 'imperial';
   const total = plan.exercises.length;
   const ex = plan.exercises[idx];
   const restBetween = ex.restSec ?? 60;
@@ -81,7 +83,10 @@ export default function WorkoutSession() {
 
   const toStrength = (): StrengthExercise => ({
     name: ex.name,
-    sets: sets.map((s) => ({ reps: Number(s.reps) || 0, weightKg: s.weight ? Number(s.weight) : undefined })),
+    sets: sets.map((s) => ({
+      reps: Number(s.reps) || 0,
+      weightKg: s.weight ? Math.round(displayToKg(Number(s.weight), units) * 100) / 100 : undefined,
+    })),
   });
 
   const finishWorkout = (all: StrengthExercise[]) => {
@@ -195,7 +200,7 @@ export default function WorkoutSession() {
               Fix anything before locking in this exercise.
             </Text>
             {sets.map((s, k) => (
-              <SetEditor key={k} index={k} row={s} onChange={(patch) => updateSet(k, patch)} showDone={false} />
+              <SetEditor key={k} index={k} row={s} unit={unitLabel(units)} onChange={(patch) => updateSet(k, patch)} showDone={false} />
             ))}
           </Card>
         ) : (
@@ -204,7 +209,7 @@ export default function WorkoutSession() {
               Log your sets
             </Text>
             {sets.map((s, k) => (
-              <SetEditor key={k} index={k} row={s} onChange={(patch) => updateSet(k, patch)} onDone={() => markDone(k)} showDone />
+              <SetEditor key={k} index={k} row={s} unit={unitLabel(units)} onChange={(patch) => updateSet(k, patch)} onDone={() => markDone(k)} showDone />
             ))}
             <Pressable onPress={addSet} style={styles.addSet}>
               <Ionicons name="add-circle-outline" size={18} color={theme.colors.brand} />
@@ -237,12 +242,14 @@ export default function WorkoutSession() {
 function SetEditor({
   index,
   row,
+  unit,
   onChange,
   onDone,
   showDone,
 }: {
   index: number;
   row: SetRow;
+  unit: string;
   onChange: (patch: Partial<SetRow>) => void;
   onDone?: () => void;
   showDone: boolean;
@@ -273,7 +280,7 @@ function SetEditor({
           style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.card }]}
         />
         <Text variant="caption" color="textFaint" style={styles.unit}>
-          kg
+          {unit}
         </Text>
       </View>
       {showDone ? (

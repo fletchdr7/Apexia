@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
-import { Button, Card, Screen, SectionHeader, Text } from '@/components';
+import { Button, Card, Chip, Screen, SectionHeader, Text } from '@/components';
 import { config } from '@/lib/config';
 import { useAppStore } from '@/store/AppStore';
 import { useAuth } from '@/store/AuthContext';
@@ -13,7 +13,7 @@ import { formatHeight, formatWeight } from '@/utils/units';
 export default function Profile() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, resetAll, supplements } = useAppStore();
+  const { profile, resetAll, supplements, updateProfile } = useAppStore();
   const { configured, session, email, signOut } = useAuth();
 
   const handleSignOut = async () => {
@@ -85,6 +85,13 @@ export default function Profile() {
       <SectionHeader title="Preferences" />
       <Card>
         <Text variant="label" style={{ marginBottom: 8 }}>
+          Units
+        </Text>
+        <View style={styles.tags}>
+          <Chip label="Imperial (lb)" selected={profile.units === 'imperial'} onPress={() => updateProfile({ units: 'imperial' })} />
+          <Chip label="Metric (kg)" selected={profile.units === 'metric'} onPress={() => updateProfile({ units: 'metric' })} />
+        </View>
+        <Text variant="label" style={{ marginTop: 16, marginBottom: 8 }}>
           Lifestyle
         </Text>
         <View style={styles.tags}>

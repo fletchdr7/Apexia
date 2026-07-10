@@ -1,4 +1,7 @@
 import type { ExerciseRecord, ExperienceLevel, GoalType } from '@/types';
+import { kgToDisplay, unitLabel } from './units';
+
+type Units = 'metric' | 'imperial';
 
 export function exerciseKey(name: string): string {
   return name.trim().toLowerCase();
@@ -15,23 +18,30 @@ function topRepOfRange(reps: string): number {
  * hit the top of the rep range last time, nudge the weight up; otherwise keep
  * the weight and aim for another rep.
  */
-export function progressionFor(record: ExerciseRecord, goalReps: string): { suggestedWeight?: string; note: string } {
+export function progressionFor(
+  record: ExerciseRecord,
+  goalReps: string,
+  units: Units = 'metric',
+): { suggestedWeight?: string; note: string } {
+  const u = unitLabel(units);
   if (record.lastWeightKg == null) {
     return { note: `Last: bodyweight × ${record.lastReps ?? '—'}` };
   }
   const top = topRepOfRange(goalReps);
   const last = record.lastWeightKg;
+  const lastDisp = kgToDisplay(last, units);
   if ((record.lastReps ?? 0) >= top) {
     const incr = last < 10 ? 1 : 2.5;
-    const next = Math.round((last + incr) * 2) / 2; // nearest 0.5 kg
+    const next = Math.round((last + incr) * 2) / 2; // nearest 0.5 kg (canonical)
+    const incrDisp = units === 'imperial' ? 5 : incr;
     return {
-      suggestedWeight: `~${next} kg`,
-      note: `Last: ${last}kg × ${record.lastReps} — try +${incr}kg`,
+      suggestedWeight: `~${kgToDisplay(next, units)} ${u}`,
+      note: `Last: ${lastDisp}${u} × ${record.lastReps} — try +${incrDisp}${u}`,
     };
   }
   return {
-    suggestedWeight: `~${last} kg`,
-    note: `Last: ${last}kg × ${record.lastReps} — aim for +1 rep`,
+    suggestedWeight: `~${lastDisp} ${u}`,
+    note: `Last: ${lastDisp}${u} × ${record.lastReps} — aim for +1 rep`,
   };
 }
 
