@@ -14,6 +14,8 @@ from .schemas import (
     PlanRequest,
     SupplementImageRequest,
     SupplementResult,
+    SwapRequest,
+    SwapResponse,
     WorkoutPlan,
     WorkoutPlanRequest,
 )
@@ -80,3 +82,8 @@ def coach_plan(req: PlanRequest, _auth=Depends(verify_auth)) -> CoachPlan:
 @app.post("/coach/workout", response_model=WorkoutPlan)
 def coach_workout(req: WorkoutPlanRequest, _auth=Depends(verify_auth)) -> WorkoutPlan:
     return ai.generate_workout(req)
+
+
+@app.post("/coach/swap", response_model=SwapResponse)
+def coach_swap(req: SwapRequest, _auth=Depends(verify_auth)) -> SwapResponse:
+    return SwapResponse(alternatives=ai.suggest_swaps(req))

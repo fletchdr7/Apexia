@@ -25,6 +25,7 @@ from .schemas import (
     PlannedExercise,
     Profile,
     SupplementResult,
+    SwapRequest,
     WorkoutPlan,
     WorkoutPlanRequest,
 )
@@ -421,8 +422,14 @@ def _workout_via_ai(client, req: WorkoutPlanRequest) -> Optional[WorkoutPlan]:
     sex = (p.sex if p and p.sex else "male")
     goal = (p.goal if p and p.goal else "maintain")
 
+    focus_line = (
+        f"Focus on these muscle groups: {req.muscleGroups}. "
+        if req.muscleGroups and "full_body" not in req.muscleGroups
+        else "Train the full body. "
+    )
     prompt = (
         f"Build a single {req.location} workout that fits in about {req.durationMin} minutes. "
+        f"{focus_line}"
         f"Only use these available equipment items: {equipment_names or ['bodyweight only']}. "
         f"The user: bodyweight {bodyweight} kg, sex {sex}, experience {experience}, goal {goal}. "
         "Pick an appropriate number of exercises for the time budget (include warm-up and cool-down). "
@@ -499,6 +506,74 @@ def _workout_fallback(req: WorkoutPlanRequest) -> WorkoutPlan:
         notes="Starting estimate — adjust weights so the last 1-2 reps are challenging.",
         generatedAt=_now_iso(),
     )
+
+
+def suggest_swaps(req: SwapRequest) -> list[PlannedExercise]:
+    client = _client()
+    scheme = GOAL_REP_SCHEME.get(
+        (req.profile.goal if req.profile and req.profile.goal else "maintain"), GOAL_REP_SCHEME["maintain"]
+    )
+    if client is not None:
+        try:
+            settings = get_settings()
+            prompt = (
+                f"The user wants to replace '{req.exercise}' (targets: {req.muscles}). "
+                f"Suggest 4 alternative exercises that train the same muscle group(s) using ONLY this "
+                f"available equipment: {[e.name for e in req.equipment] or ['bodyweight']}. "
+                "Do not include the original exercise. Respond ONLY with JSON: "
+                '{"alternatives": [{"name": str, "equipment": str, "muscles": [str], "notes": str}]}.'
+            )
+            resp = client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+                temperature=0.4,
+            )
+            data = _extract_json(resp.choices[0].message.content or "")
+            out: list[PlannedExercise] = []
+            for alt in data.get("alternatives", []):
+                out.append(
+                    PlannedExercise(
+                        name=alt.get("name", ""),
+                        equipment=alt.get("equipment"),
+                        sets=scheme["sets"],
+                        reps=scheme["reps"],
+                        restSec=scheme["restSec"],
+                        muscles=alt.get("muscles", []),
+                        notes=alt.get("notes"),
+                    )
+                )
+            if out:
+                return out
+        except Exception:
+            logger.exception("Swap suggestion failed; using heuristic")
+
+    # Fallback: pull matching exercises from equipment example lists.
+    targets = [m.lower() for m in req.muscles]
+    out: list[PlannedExercise] = []
+    seen: set[str] = set()
+    for e in req.equipment:
+        matches = not targets or any(
+            any(t in m.lower() or m.lower() in t for t in targets) for m in e.primaryMuscles
+        )
+        if not matches:
+            continue
+        for ex in (e.exampleExercises or [e.name]):
+            if ex.lower() == req.exercise.lower() or ex.lower() in seen:
+                continue
+            seen.add(ex.lower())
+            out.append(
+                PlannedExercise(
+                    name=ex,
+                    equipment=e.name,
+                    sets=scheme["sets"],
+                    reps=scheme["reps"],
+                    restSec=scheme["restSec"],
+                    muscles=e.primaryMuscles,
+                    suggestedWeight="bodyweight" if e.name.lower() == "bodyweight" else "moderate",
+                )
+            )
+    return out[:6]
 
 
 # ---------------------------------------------------------------------------

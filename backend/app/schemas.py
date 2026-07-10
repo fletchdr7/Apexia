@@ -150,7 +150,19 @@ class WorkoutPlanRequest(BaseModel):
     profile: Optional[Profile] = None
     location: str = "gym"
     durationMin: int = 45
+    muscleGroups: list[str] = []
     equipment: list[EquipmentInput] = []
+
+
+class SwapRequest(BaseModel):
+    profile: Optional[Profile] = None
+    exercise: str
+    muscles: list[str] = []
+    equipment: list[EquipmentInput] = []
+
+
+class SwapResponse(BaseModel):
+    alternatives: list[PlannedExercise] = []
 
 
 class DailyPlanItem(BaseModel):
