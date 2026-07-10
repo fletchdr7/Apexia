@@ -19,7 +19,7 @@ type Mode = 'plate' | 'label';
 export default function ScanFood() {
   const theme = useTheme();
   const router = useRouter();
-  const { addFood } = useAppStore();
+  const { addFood, dateStamp } = useAppStore();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -60,7 +60,7 @@ export default function ScanFood() {
     addFood({
       name: result.name,
       slot,
-      loggedAt: new Date().toISOString(),
+      loggedAt: dateStamp(),
       servings: s,
       nutrients: result.total,
       source: mode === 'label' ? 'label_scan' : 'plate_scan',

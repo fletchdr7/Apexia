@@ -1,6 +1,7 @@
 export { Button } from './Button';
 export { Card } from './Card';
 export { Chip } from './Chip';
+export { DateBar } from './DateBar';
 export { EmptyState } from './EmptyState';
 export { Input } from './Input';
 export { MacroBar } from './MacroBar';

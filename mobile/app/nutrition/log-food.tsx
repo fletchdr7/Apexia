@@ -12,7 +12,7 @@ import { defaultSlotForNow } from '@/utils/meal';
 export default function LogFood() {
   const theme = useTheme();
   const router = useRouter();
-  const { addFood } = useAppStore();
+  const { addFood, dateStamp } = useAppStore();
 
   const [name, setName] = useState('');
   const [slot, setSlot] = useState<MealSlot>(defaultSlotForNow());
@@ -28,7 +28,7 @@ export default function LogFood() {
     addFood({
       name: name.trim(),
       slot,
-      loggedAt: new Date().toISOString(),
+      loggedAt: dateStamp(),
       servings: Number(servings) || 1,
       nutrients: {
         calories: Number(calories) || 0,

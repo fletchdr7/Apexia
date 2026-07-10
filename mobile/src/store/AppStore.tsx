@@ -12,7 +12,7 @@ import type {
   WorkoutLocation,
   WorkoutPlan,
 } from '@/types';
-import { isSameDay } from '@/utils/date';
+import { stampForDate, todayKey } from '@/utils/date';
 import { uid } from '@/utils/id';
 import { addNutrients, emptyNutrients } from '@/utils/nutrition';
 import {
@@ -67,6 +67,11 @@ interface AppStoreValue extends PersistedState {
   /** Transient plan being run in an active workout session (not persisted). */
   activePlan: WorkoutPlan | null;
   setActivePlan: (plan: WorkoutPlan | null) => void;
+  /** The day the app is focused on for viewing/logging (YYYY-MM-DD). */
+  selectedDate: string;
+  setSelectedDate: (dateKey: string) => void;
+  /** ISO timestamp on the selected day (current time), for new log entries. */
+  dateStamp: () => string;
   // profile
   setProfile: (profile: UserProfile) => void;
   updateProfile: (patch: Partial<UserProfile>) => void;
@@ -86,6 +91,9 @@ interface AppStoreValue extends PersistedState {
   removeEquipment: (id: string) => void;
   toggleEquipment: (id: string, location: WorkoutLocation) => void;
   // derived helpers
+  foodsForDate: (dateKey: string) => FoodEntry[];
+  workoutsForDate: (dateKey: string) => WorkoutEntry[];
+  nutritionForDate: (dateKey: string) => ReturnType<typeof emptyNutrients>;
   todaysFoods: () => FoodEntry[];
   todaysWorkouts: () => WorkoutEntry[];
   todaysNutrition: () => ReturnType<typeof emptyNutrients>;
@@ -125,6 +133,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedState>(initialState);
   const [ready, setReady] = useState(false);
   const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(() => todayKey());
+  const dateStamp = useCallback(() => stampForDate(selectedDate), [selectedDate]);
 
   useEffect(() => {
     (async () => {
@@ -282,14 +292,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const todaysFoods = useCallback(() => state.foods.filter((f) => isSameDay(f.loggedAt)), [state.foods]);
-  const todaysWorkouts = useCallback(
-    () => state.workouts.filter((w) => isSameDay(w.performedAt)),
+  const foodsForDate = useCallback(
+    (dateKey: string) => state.foods.filter((f) => f.loggedAt.slice(0, 10) === dateKey),
+    [state.foods],
+  );
+  const workoutsForDate = useCallback(
+    (dateKey: string) => state.workouts.filter((w) => w.performedAt.slice(0, 10) === dateKey),
     [state.workouts],
   );
-  const todaysNutrition = useCallback(() => {
-    return todaysFoods().reduce((acc, f) => addNutrients(acc, f.nutrients, f.servings), emptyNutrients());
-  }, [todaysFoods]);
+  const nutritionForDate = useCallback(
+    (dateKey: string) =>
+      foodsForDate(dateKey).reduce((acc, f) => addNutrients(acc, f.nutrients, f.servings), emptyNutrients()),
+    [foodsForDate],
+  );
+  const todaysFoods = useCallback(() => foodsForDate(todayKey()), [foodsForDate]);
+  const todaysWorkouts = useCallback(() => workoutsForDate(todayKey()), [workoutsForDate]);
+  const todaysNutrition = useCallback(() => nutritionForDate(todayKey()), [nutritionForDate]);
 
   const snapshot = useMemo<SyncableState>(
     () => ({
@@ -326,6 +344,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setHealthEnabled,
       activePlan,
       setActivePlan,
+      selectedDate,
+      setSelectedDate,
+      dateStamp,
       setProfile,
       updateProfile,
       resetAll,
@@ -339,6 +360,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addEquipment,
       removeEquipment,
       toggleEquipment,
+      foodsForDate,
+      workoutsForDate,
+      nutritionForDate,
       todaysFoods,
       todaysWorkouts,
       todaysNutrition,
@@ -351,6 +375,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setGuestMode,
       setHealthEnabled,
       activePlan,
+      selectedDate,
+      dateStamp,
       setProfile,
       updateProfile,
       resetAll,
@@ -364,6 +390,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addEquipment,
       removeEquipment,
       toggleEquipment,
+      foodsForDate,
+      workoutsForDate,
+      nutritionForDate,
       todaysFoods,
       todaysWorkouts,
       todaysNutrition,

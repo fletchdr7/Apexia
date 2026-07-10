@@ -33,7 +33,7 @@ function initSets(ex: PlannedExercise): SetRow[] {
 export default function WorkoutSession() {
   const theme = useTheme();
   const router = useRouter();
-  const { activePlan, setActivePlan, addWorkout, profile } = useAppStore();
+  const { activePlan, setActivePlan, addWorkout, profile, dateStamp } = useAppStore();
 
   const [idx, setIdx] = useState(0);
   const [sets, setSets] = useState<SetRow[]>(() => (activePlan ? initSets(activePlan.exercises[0]) : []));
@@ -95,7 +95,7 @@ export default function WorkoutSession() {
     addWorkout({
       type: plan.location,
       title: plan.title,
-      performedAt: new Date().toISOString(),
+      performedAt: dateStamp(),
       durationMin: plan.durationMin,
       intensity: 'moderate',
       caloriesBurned: estimateCaloriesBurned(met, weightKg, plan.durationMin),

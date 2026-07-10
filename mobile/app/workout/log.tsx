@@ -15,7 +15,7 @@ const INTENSITIES: Intensity[] = ['easy', 'moderate', 'hard', 'max'];
 export default function LogWorkout() {
   const theme = useTheme();
   const router = useRouter();
-  const { addWorkout, profile } = useAppStore();
+  const { addWorkout, profile, dateStamp } = useAppStore();
 
   const [type, setType] = useState<WorkoutType>('gym');
   const [title, setTitle] = useState('');
@@ -37,7 +37,7 @@ export default function LogWorkout() {
     addWorkout({
       type,
       title: title.trim() || meta.label,
-      performedAt: new Date().toISOString(),
+      performedAt: dateStamp(),
       durationMin: Number(duration) || 0,
       intensity,
       caloriesBurned: estCalories,

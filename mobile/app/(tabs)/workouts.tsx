@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Button, Card, EmptyState, Screen, SectionHeader, StatTile, Text } from '@/components';
+import { Button, Card, DateBar, EmptyState, Screen, SectionHeader, StatTile, Text } from '@/components';
 import { ACTIVITIES } from '@/constants/activities';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
@@ -11,7 +11,8 @@ import { isSameDay, relativeDay, timeLabel } from '@/utils/date';
 export default function Workouts() {
   const theme = useTheme();
   const router = useRouter();
-  const { workouts, profile, removeWorkout, gymEquipmentIds, homeEquipmentIds } = useAppStore();
+  const { workouts, profile, removeWorkout, gymEquipmentIds, homeEquipmentIds, selectedDate, setSelectedDate } =
+    useAppStore();
 
   const now = new Date();
   const weekStart = new Date(now);
@@ -29,7 +30,14 @@ export default function Workouts() {
         <Button label="Log" icon="add" onPress={() => router.push('/workout/log')} fullWidth={false} size="sm" />
       </View>
 
-      <Card onPress={() => router.push('/workout/plan')} style={{ marginTop: 8 }}>
+      <View style={{ marginTop: 8 }}>
+        <DateBar date={selectedDate} onChange={setSelectedDate} />
+        <Text variant="caption" color="textFaint" style={{ marginTop: 6, textAlign: 'center' }}>
+          New workouts are logged to this day
+        </Text>
+      </View>
+
+      <Card onPress={() => router.push('/workout/plan')} style={{ marginTop: 12 }}>
         <View style={styles.row}>
           <View style={[styles.icon, { backgroundColor: theme.colors.brand }]}>
             <Ionicons name="sparkles" size={22} color={theme.colors.onBrand} />

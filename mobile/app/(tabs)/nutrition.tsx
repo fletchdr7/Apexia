@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Button, Card, EmptyState, MacroBar, Screen, SectionHeader, Text } from '@/components';
+import { Button, Card, DateBar, EmptyState, MacroBar, Screen, SectionHeader, Text } from '@/components';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { FoodEntry, MealSlot } from '@/types';
@@ -26,10 +26,10 @@ const SOURCE_ICON: Record<FoodEntry['source'], keyof typeof Ionicons.glyphMap> =
 export default function Nutrition() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, todaysFoods, todaysNutrition, removeFood } = useAppStore();
+  const { profile, selectedDate, setSelectedDate, foodsForDate, nutritionForDate, removeFood } = useAppStore();
 
-  const foods = todaysFoods();
-  const nutrition = todaysNutrition();
+  const foods = foodsForDate(selectedDate);
+  const nutrition = nutritionForDate(selectedDate);
   const targets = profile?.targets;
 
   return (
@@ -39,6 +39,10 @@ export default function Nutrition() {
         <Button label="Scan" icon="camera" onPress={() => router.push('/nutrition/scan')} fullWidth={false} size="sm" />
       </View>
 
+      <View style={{ marginBottom: 8 }}>
+        <DateBar date={selectedDate} onChange={setSelectedDate} />
+      </View>
+
       <Card style={{ marginTop: 8 }}>
         <View style={styles.summaryRow}>
           <View>
@@ -46,7 +50,7 @@ export default function Nutrition() {
               {Math.round(nutrition.calories)}
             </Text>
             <Text variant="caption" color="textMuted">
-              of {targets?.calories ?? '—'} kcal today
+              of {targets?.calories ?? '—'} kcal
             </Text>
           </View>
           <View style={[styles.badge, { backgroundColor: theme.colors.brandSoft }]}>
@@ -87,9 +91,9 @@ export default function Nutrition() {
         <View style={{ marginTop: 8 }}>
           <EmptyState
             icon="restaurant"
-            title="Nothing logged today"
+            title="Nothing logged for this day"
             message="Snap a photo of your meal or a nutrition label and Apexia estimates the macros."
-            actionLabel="Log your first meal"
+            actionLabel="Log a meal"
             onAction={() => router.push('/nutrition/scan')}
           />
         </View>
