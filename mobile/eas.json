@@ -13,11 +13,21 @@
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://wknbspbeubtlstieobxr.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_FfxF4srSSwxguwofvuGIVg_f2hGmZpz",
+        "EXPO_PUBLIC_AI_API_URL": "https://apexia-api.onrender.com"
+      }
     },
     "production": {
       "channel": "production",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://wknbspbeubtlstieobxr.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_FfxF4srSSwxguwofvuGIVg_f2hGmZpz",
+        "EXPO_PUBLIC_AI_API_URL": "https://apexia-api.onrender.com"
+      }
     }
   },
   "submit": {
