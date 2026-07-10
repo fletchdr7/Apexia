@@ -27,7 +27,6 @@ interface Draft {
   heightCm: number;
   weightKg: number;
   targetWeightKg: number;
-  age: number;
   activityLevel: ActivityLevel;
   preferredActivities: WorkoutType[];
   weeklyWorkoutTarget: number;
@@ -79,7 +78,6 @@ export default function Onboarding() {
     heightCm: 178,
     weightKg: 80,
     targetWeightKg: 75,
-    age: 30,
     activityLevel: 'moderate',
     preferredActivities: ['gym', 'run'],
     weeklyWorkoutTarget: 4,
@@ -88,7 +86,8 @@ export default function Onboarding() {
     dietaryPreferences: [],
   });
 
-  // Local imperial input buffers
+  // Local text input buffers (validated when used, not on every keystroke)
+  const [ageStr, setAgeStr] = useState('30');
   const [ft, setFt] = useState('5');
   const [inch, setInch] = useState('10');
   const [heightCmStr, setHeightCmStr] = useState('178');
@@ -99,17 +98,20 @@ export default function Onboarding() {
   const toggle = <T,>(list: T[], value: T): T[] =>
     list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
 
+  // Clamp only when reading the value, so typing "2" -> "25" isn't snapped mid-entry.
+  const parsedAge = Math.max(13, Math.min(100, Number(ageStr) || 0)) || 30;
+
   const targets = useMemo(
     () =>
       computeTargets({
         sex: draft.sex,
         weightKg: draft.weightKg,
         heightCm: draft.heightCm,
-        age: draft.age,
+        age: parsedAge,
         activityLevel: draft.activityLevel,
         goal: draft.goal,
       }),
-    [draft],
+    [draft, parsedAge],
   );
 
   const commitBody = () => {
@@ -128,7 +130,7 @@ export default function Onboarding() {
       id: 'local-user',
       displayName: draft.displayName.trim() || 'Athlete',
       sex: draft.sex,
-      birthYear: new Date().getFullYear() - draft.age,
+      birthYear: new Date().getFullYear() - parsedAge,
       heightCm: draft.heightCm,
       weightKg: draft.weightKg,
       targetWeightKg: draft.targetWeightKg,
@@ -204,8 +206,8 @@ export default function Onboarding() {
             </Text>
             <Input
               keyboardType="number-pad"
-              value={String(draft.age)}
-              onChangeText={(t) => set({ age: Math.max(13, Math.min(100, Number(t) || 0)) })}
+              value={ageStr}
+              onChangeText={(t) => setAgeStr(t.replace(/[^0-9]/g, '').slice(0, 3))}
               suffix="years"
             />
           </View>
