@@ -50,6 +50,17 @@ class SupplementResult(BaseModel):
     goalFit: Optional[float] = None
 
 
+class EquipmentResult(BaseModel):
+    name: str
+    category: str = "other"
+    primaryMuscles: list[str] = []
+    description: str = ""
+    exampleExercises: list[str] = []
+    howToUse: Optional[str] = None
+    confidence: float = Field(default=0.5, ge=0, le=1)
+    notes: Optional[str] = None
+
+
 class NutritionTargets(BaseModel):
     calories: float
     proteinG: float
@@ -80,6 +91,10 @@ class ImageRequest(BaseModel):
 
 
 class SupplementImageRequest(BaseModel):
+    image: str
+
+
+class EquipmentImageRequest(BaseModel):
     image: str
 
 

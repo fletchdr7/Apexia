@@ -7,6 +7,8 @@ from .schemas import (
     ChatRequest,
     ChatResponse,
     CoachPlan,
+    EquipmentImageRequest,
+    EquipmentResult,
     FoodScanResult,
     ImageRequest,
     PlanRequest,
@@ -56,6 +58,11 @@ def vision_food(req: ImageRequest, _auth=Depends(verify_auth)) -> FoodScanResult
 @app.post("/vision/supplement", response_model=SupplementResult)
 def vision_supplement(req: SupplementImageRequest, _auth=Depends(verify_auth)) -> SupplementResult:
     return ai.analyze_supplement(req.image)
+
+
+@app.post("/vision/equipment", response_model=EquipmentResult)
+def vision_equipment(req: EquipmentImageRequest, _auth=Depends(verify_auth)) -> EquipmentResult:
+    return ai.analyze_equipment(req.image)
 
 
 @app.post("/coach/chat", response_model=ChatResponse)

@@ -19,10 +19,21 @@ from .schemas import (
     ChatMessageIn,
     CoachPlan,
     DailyPlanItem,
+    EquipmentResult,
     FoodScanResult,
     Profile,
     SupplementResult,
 )
+
+EQUIPMENT_CATEGORIES = {
+    "free_weights",
+    "machine",
+    "cable",
+    "cardio",
+    "bodyweight",
+    "accessory",
+    "other",
+}
 
 GOAL_LABELS = {
     "lose_fat": "lose fat",
@@ -240,6 +251,61 @@ def _supplement_fallback() -> SupplementResult:
         cautions=["Stay hydrated"],
         timing="Any time daily; consistency matters most",
         goalFit=0.9,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Equipment vision
+# ---------------------------------------------------------------------------
+
+EQUIPMENT_PROMPT = (
+    "You are a strength coach. Identify the gym equipment in this photo. "
+    "Respond ONLY with JSON: "
+    '{"name": str, "category": one_of[free_weights|machine|cable|cardio|bodyweight|accessory|other], '
+    '"primaryMuscles": [str], "description": str, "exampleExercises": [str (2-4 items)], '
+    '"howToUse": str, "confidence": num_0_to_1}. '
+    "Keep description to one or two sentences. If unsure, still give your best guess with lower confidence."
+)
+
+
+def analyze_equipment(image_b64: str) -> EquipmentResult:
+    client = _client()
+    if client is None or not image_b64:
+        return _equipment_fallback()
+    settings = get_settings()
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_vision_model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": EQUIPMENT_PROMPT},
+                        {"type": "image_url", "image_url": {"url": _data_uri(image_b64)}},
+                    ],
+                }
+            ],
+            max_tokens=600,
+            temperature=0.2,
+        )
+        data = _extract_json(resp.choices[0].message.content or "")
+        if data.get("category") not in EQUIPMENT_CATEGORIES:
+            data["category"] = "other"
+        return EquipmentResult.model_validate(data)
+    except Exception:
+        logger.exception("Equipment vision call failed; returning heuristic")
+        return _equipment_fallback()
+
+
+def _equipment_fallback() -> EquipmentResult:
+    return EquipmentResult(
+        name="Unrecognized equipment",
+        category="other",
+        primaryMuscles=[],
+        description="Set OPENAI_API_KEY for real equipment recognition.",
+        exampleExercises=[],
+        confidence=0.4,
+        notes="Heuristic fallback.",
     )
 
 
