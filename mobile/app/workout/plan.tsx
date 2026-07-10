@@ -11,14 +11,15 @@ import { generateWorkoutPlan, swapExercise, type EquipmentInput } from '@/lib/ap
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { ExperienceLevel, PlannedExercise, WorkoutLocation, WorkoutPlan } from '@/types';
-import { experienceLabel } from '@/utils/strength';
+import { exerciseKey, experienceLabel, progressionFor } from '@/utils/strength';
 
 const DURATIONS = [20, 30, 45, 60, 75];
 
 export default function BuildWorkout() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, updateProfile, gymEquipmentIds, homeEquipmentIds, customEquipment, setActivePlan } = useAppStore();
+  const { profile, updateProfile, gymEquipmentIds, homeEquipmentIds, customEquipment, exerciseHistory, setActivePlan } =
+    useAppStore();
 
   const [location, setLocation] = useState<WorkoutLocation>('gym');
   const [duration, setDuration] = useState(45);
@@ -38,6 +39,20 @@ export default function BuildWorkout() {
     () => equipForLocation.map((e) => ({ name: e.name, exampleExercises: e.exampleExercises, primaryMuscles: e.primaryMuscles })),
     [equipForLocation],
   );
+
+  // Preload remembered weights and apply progressive overload to any exercise
+  // the user has performed before.
+  const applyHistory = (list: PlannedExercise[]): PlannedExercise[] =>
+    list.map((ex) => {
+      const rec = exerciseHistory[exerciseKey(ex.name)];
+      if (!rec) return ex;
+      const p = progressionFor(rec, ex.reps);
+      return {
+        ...ex,
+        suggestedWeight: p.suggestedWeight ?? ex.suggestedWeight,
+        notes: ex.notes ? `${ex.notes} · ${p.note}` : p.note,
+      };
+    });
 
   const toggleMuscle = (id: string) => {
     setMuscles((prev) => {
@@ -61,7 +76,7 @@ export default function BuildWorkout() {
         equipment: equipInput,
       });
       setPlan(result);
-      setExercises(result.exercises);
+      setExercises(applyHistory(result.exercises));
     } catch {
       setPlan(null);
     } finally {
@@ -107,9 +122,11 @@ export default function BuildWorkout() {
   };
   const applySwap = (i: number, alt: PlannedExercise) => {
     setExercises((prev) =>
-      prev.map((ex, idx) =>
-        idx === i ? { ...alt, sets: ex.sets, reps: ex.reps, suggestedWeight: alt.suggestedWeight ?? ex.suggestedWeight } : ex,
-      ),
+      prev.map((ex, idx) => {
+        if (idx !== i) return ex;
+        const merged = { ...alt, sets: ex.sets, reps: ex.reps, suggestedWeight: alt.suggestedWeight ?? ex.suggestedWeight };
+        return applyHistory([merged])[0];
+      }),
     );
     setSwapFor(null);
   };

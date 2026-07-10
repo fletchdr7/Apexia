@@ -1,4 +1,39 @@
-import type { ExperienceLevel, GoalType } from '@/types';
+import type { ExerciseRecord, ExperienceLevel, GoalType } from '@/types';
+
+export function exerciseKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function topRepOfRange(reps: string): number {
+  const nums = reps.match(/\d+/g);
+  if (!nums) return 12;
+  return Number(nums[nums.length - 1]);
+}
+
+/**
+ * Progressive-overload suggestion from a past performance record. If the user
+ * hit the top of the rep range last time, nudge the weight up; otherwise keep
+ * the weight and aim for another rep.
+ */
+export function progressionFor(record: ExerciseRecord, goalReps: string): { suggestedWeight?: string; note: string } {
+  if (record.lastWeightKg == null) {
+    return { note: `Last: bodyweight × ${record.lastReps ?? '—'}` };
+  }
+  const top = topRepOfRange(goalReps);
+  const last = record.lastWeightKg;
+  if ((record.lastReps ?? 0) >= top) {
+    const incr = last < 10 ? 1 : 2.5;
+    const next = Math.round((last + incr) * 2) / 2; // nearest 0.5 kg
+    return {
+      suggestedWeight: `~${next} kg`,
+      note: `Last: ${last}kg × ${record.lastReps} — try +${incr}kg`,
+    };
+  }
+  return {
+    suggestedWeight: `~${last} kg`,
+    note: `Last: ${last}kg × ${record.lastReps} — aim for +1 rep`,
+  };
+}
 
 export interface RepScheme {
   sets: number;

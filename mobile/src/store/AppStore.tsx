@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import type {
   Equipment,
+  ExerciseRecord,
   FoodEntry,
   Supplement,
   SupplementLog,
@@ -34,6 +35,8 @@ interface PersistedState {
   /** Ids (catalog or custom) of equipment available at the gym / at home. */
   gymEquipmentIds: string[];
   homeEquipmentIds: string[];
+  /** Per-exercise performance memory (keyed by lowercase name) for progression. */
+  exerciseHistory: Record<string, ExerciseRecord>;
   seeded: boolean;
   /** User chose to use the app without an account (local-only, no sync). */
   guestMode: boolean;
@@ -50,6 +53,7 @@ export type SyncableState = Pick<
   | 'customEquipment'
   | 'gymEquipmentIds'
   | 'homeEquipmentIds'
+  | 'exerciseHistory'
 >;
 
 interface AppStoreValue extends PersistedState {
@@ -93,6 +97,7 @@ const initialState: PersistedState = {
   customEquipment: [],
   gymEquipmentIds: [],
   homeEquipmentIds: [],
+  exerciseHistory: {},
   seeded: false,
   guestMode: false,
 };
@@ -106,6 +111,7 @@ function normalize(raw: Partial<PersistedState> & { selectedEquipmentIds?: strin
   merged.gymEquipmentIds = merged.gymEquipmentIds ?? [];
   merged.homeEquipmentIds = merged.homeEquipmentIds ?? [];
   merged.customEquipment = merged.customEquipment ?? [];
+  merged.exerciseHistory = merged.exerciseHistory ?? {};
   return merged;
 }
 
@@ -175,7 +181,32 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const addWorkout = useCallback((w: Omit<WorkoutEntry, 'id'>) => {
     const entry: WorkoutEntry = { ...w, id: uid('w_') };
-    setState((s) => ({ ...s, workouts: [entry, ...s.workouts] }));
+    setState((s) => {
+      const history = { ...s.exerciseHistory };
+      for (const ex of entry.exercises ?? []) {
+        if (!ex.sets || ex.sets.length === 0) continue;
+        // Pick the "top" set: heaviest, then most reps.
+        const top = ex.sets.reduce((best, st) => {
+          const w1 = st.weightKg ?? 0;
+          const w0 = best.weightKg ?? 0;
+          if (w1 > w0) return st;
+          if (w1 === w0 && st.reps > best.reps) return st;
+          return best;
+        }, ex.sets[0]);
+        const key = ex.name.trim().toLowerCase();
+        const prev = history[key];
+        const best = Math.max(prev?.bestWeightKg ?? 0, top.weightKg ?? 0);
+        history[key] = {
+          name: ex.name,
+          lastWeightKg: top.weightKg,
+          lastReps: top.reps,
+          bestWeightKg: best > 0 ? best : undefined,
+          sessions: (prev?.sessions ?? 0) + 1,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return { ...s, workouts: [entry, ...s.workouts], exerciseHistory: history };
+    });
     return entry;
   }, []);
 
@@ -262,6 +293,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       customEquipment: state.customEquipment,
       gymEquipmentIds: state.gymEquipmentIds,
       homeEquipmentIds: state.homeEquipmentIds,
+      exerciseHistory: state.exerciseHistory,
     }),
     [
       state.profile,
@@ -272,6 +304,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       state.customEquipment,
       state.gymEquipmentIds,
       state.homeEquipmentIds,
+      state.exerciseHistory,
     ],
   );
 

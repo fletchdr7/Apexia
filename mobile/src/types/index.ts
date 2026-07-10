@@ -163,6 +163,15 @@ export interface Equipment {
   source: 'catalog' | 'scan' | 'manual';
 }
 
+export interface ExerciseRecord {
+  name: string;
+  lastWeightKg?: number;
+  lastReps?: number;
+  bestWeightKg?: number;
+  sessions: number;
+  updatedAt: string;
+}
+
 export interface PlannedExercise {
   name: string;
   equipment?: string;
