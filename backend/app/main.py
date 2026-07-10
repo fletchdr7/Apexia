@@ -42,6 +42,12 @@ def health() -> dict:
     return {"status": "ok", "openai": settings.has_openai, "auth": settings.require_auth}
 
 
+@app.get("/diag/openai")
+def diag_openai() -> dict:
+    """Actively tests the OpenAI connection and returns the real result/error."""
+    return ai.diagnose_openai()
+
+
 @app.post("/vision/food", response_model=FoodScanResult)
 def vision_food(req: ImageRequest, _auth=Depends(verify_auth)) -> FoodScanResult:
     return ai.analyze_food(req.image, req.mode)

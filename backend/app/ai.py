@@ -7,11 +7,14 @@ deterministic heuristic result, so the backend is always usable in development.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
 from .config import get_settings
+
+logger = logging.getLogger("apexia.ai")
 from .schemas import (
     ChatMessageIn,
     CoachPlan,
@@ -51,7 +54,38 @@ def _client():
 
         return OpenAI(api_key=settings.openai_api_key)
     except Exception:
+        logger.exception("Failed to create OpenAI client")
         return None
+
+
+def diagnose_openai() -> dict:
+    """Make a tiny real OpenAI call so failures (bad key, no quota, no model
+    access) are visible in the browser instead of silently falling back."""
+    settings = get_settings()
+    if not settings.has_openai:
+        return {"ok": False, "reason": "OPENAI_API_KEY is not set on the server"}
+    client = _client()
+    if client is None:
+        return {"ok": False, "reason": "OpenAI client could not be created (see logs)"}
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": "Reply with the single word: pong"}],
+            max_tokens=5,
+        )
+        return {
+            "ok": True,
+            "chat_model": settings.openai_model,
+            "vision_model": settings.openai_vision_model,
+            "reply": (resp.choices[0].message.content or "").strip(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "chat_model": settings.openai_model,
+            "error_type": type(exc).__name__,
+            "error": str(exc)[:600],
+        }
 
 
 def _data_uri(image_b64: str) -> str:
@@ -122,6 +156,7 @@ def analyze_food(image_b64: str, mode: str) -> FoodScanResult:
         data = _extract_json(resp.choices[0].message.content or "")
         return FoodScanResult.model_validate(data)
     except Exception:
+        logger.exception("Food vision call failed; returning heuristic")
         return _food_fallback(mode)
 
 
@@ -190,6 +225,7 @@ def analyze_supplement(image_b64: str) -> SupplementResult:
         data = _extract_json(resp.choices[0].message.content or "")
         return SupplementResult.model_validate(data)
     except Exception:
+        logger.exception("Supplement vision call failed; returning heuristic")
         return _supplement_fallback()
 
 
@@ -254,6 +290,7 @@ def coach_chat(messages: list[ChatMessageIn], profile: Optional[Profile]) -> str
         )
         return (resp.choices[0].message.content or "").strip() or _coach_fallback(messages, profile)
     except Exception:
+        logger.exception("Coach chat call failed; returning heuristic")
         return _coach_fallback(messages, profile)
 
 
@@ -336,6 +373,7 @@ def _plan_via_ai(client, profile: Profile) -> Optional[CoachPlan]:
             generatedAt=_now_iso(),
         )
     except Exception:
+        logger.exception("Daily plan call failed; using heuristic")
         return None
 
 
