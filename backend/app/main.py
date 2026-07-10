@@ -1,0 +1,62 @@
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from . import __version__, ai
+from .config import get_settings
+from .schemas import (
+    ChatRequest,
+    ChatResponse,
+    CoachPlan,
+    FoodScanResult,
+    ImageRequest,
+    PlanRequest,
+    SupplementImageRequest,
+    SupplementResult,
+)
+from .security import verify_auth
+
+settings = get_settings()
+
+app = FastAPI(
+    title="Apexia AI Backend",
+    version=__version__,
+    description="Food/supplement vision, coaching chat, and daily plans for the Apexia app.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+def root() -> dict:
+    return {"name": "Apexia AI Backend", "version": __version__, "docs": "/docs"}
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok", "openai": settings.has_openai, "auth": settings.require_auth}
+
+
+@app.post("/vision/food", response_model=FoodScanResult)
+def vision_food(req: ImageRequest, _auth=Depends(verify_auth)) -> FoodScanResult:
+    return ai.analyze_food(req.image, req.mode)
+
+
+@app.post("/vision/supplement", response_model=SupplementResult)
+def vision_supplement(req: SupplementImageRequest, _auth=Depends(verify_auth)) -> SupplementResult:
+    return ai.analyze_supplement(req.image)
+
+
+@app.post("/coach/chat", response_model=ChatResponse)
+def coach_chat(req: ChatRequest, _auth=Depends(verify_auth)) -> ChatResponse:
+    return ChatResponse(content=ai.coach_chat(req.messages, req.profile))
+
+
+@app.post("/coach/plan", response_model=CoachPlan)
+def coach_plan(req: PlanRequest, _auth=Depends(verify_auth)) -> CoachPlan:
+    return ai.daily_plan(req.profile)
