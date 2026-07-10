@@ -3,12 +3,16 @@ import type {
   CoachPlan,
   EquipmentScanResult,
   FoodScanResult,
+  PlannedExercise,
   Supplement,
   UserProfile,
+  WorkoutLocation,
+  WorkoutPlan,
 } from '@/types';
 import { COMMON_SUPPLEMENTS, GOAL_SUPPLEMENT_HINTS } from '@/constants/supplements';
 import { uid } from '@/utils/id';
 import { goalLabel } from '@/utils/nutrition';
+import { estimateWeightKg, repSchemeForGoal } from '@/utils/strength';
 import { config } from './config';
 import { supabase } from './supabase';
 
@@ -112,6 +116,79 @@ export async function analyzeEquipmentPhoto(imageBase64: string): Promise<Equipm
     exampleExercises: [],
     confidence: 0.4,
     notes: 'Demo mode — connect the AI backend for real equipment recognition.',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Workout plan builder
+// ---------------------------------------------------------------------------
+
+export interface WorkoutPlanParams {
+  profile: UserProfile | null;
+  location: WorkoutLocation;
+  durationMin: number;
+  equipment: { name: string; exampleExercises?: string[]; primaryMuscles?: string[] }[];
+}
+
+export async function generateWorkoutPlan(params: WorkoutPlanParams): Promise<WorkoutPlan> {
+  if (config.hasAiBackend) {
+    return post<WorkoutPlan>('/coach/workout', {
+      profile: params.profile,
+      location: params.location,
+      durationMin: params.durationMin,
+      equipment: params.equipment,
+    });
+  }
+  return localWorkoutPlan(params);
+}
+
+function localWorkoutPlan({ profile, location, durationMin, equipment }: WorkoutPlanParams): WorkoutPlan {
+  const goal = profile?.goal ?? 'maintain';
+  const scheme = repSchemeForGoal(goal);
+  const experience = profile?.experience ?? 'beginner';
+  const bodyweight = profile?.weightKg ?? 75;
+  const sexFactor = profile?.sex === 'female' ? 0.7 : 1;
+  const slots = Math.max(3, Math.min(8, Math.floor((durationMin - 10) / 7)));
+
+  const pool: { name: string; equipment: string; muscles?: string[] }[] = [];
+  for (const e of equipment) {
+    const exercises = e.exampleExercises && e.exampleExercises.length ? e.exampleExercises : [e.name];
+    for (const ex of exercises) pool.push({ name: ex, equipment: e.name, muscles: e.primaryMuscles });
+  }
+  const base = pool.length
+    ? pool
+    : [
+        { name: 'Push-ups', equipment: 'Bodyweight' },
+        { name: 'Bodyweight squats', equipment: 'Bodyweight' },
+        { name: 'Plank', equipment: 'Bodyweight' },
+        { name: 'Lunges', equipment: 'Bodyweight' },
+        { name: 'Glute bridge', equipment: 'Bodyweight' },
+      ];
+
+  const exercises: PlannedExercise[] = base.slice(0, slots).map((c) => {
+    const kg = estimateWeightKg(c.name, bodyweight, experience, sexFactor);
+    const isBodyweight = c.equipment.toLowerCase() === 'bodyweight';
+    return {
+      name: c.name,
+      equipment: c.equipment,
+      sets: scheme.sets,
+      reps: scheme.reps,
+      restSec: scheme.restSec,
+      muscles: c.muscles,
+      suggestedWeight: isBodyweight ? 'bodyweight' : kg ? `~${kg} kg` : 'moderate',
+    };
+  });
+
+  return {
+    title: `${location === 'home' ? 'Home' : 'Gym'} workout`,
+    focus: 'Full body',
+    location,
+    durationMin,
+    warmup: ['5 min easy cardio', 'Dynamic stretches for the muscles you\u2019ll train'],
+    exercises,
+    cooldown: ['3\u20135 min easy walk', 'Stretch the muscles you trained'],
+    notes: 'Starting estimate \u2014 adjust so the last 1\u20132 reps are challenging.',
+    generatedAt: new Date().toISOString(),
   };
 }
 

@@ -10,6 +10,7 @@ import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type {
   ActivityLevel,
+  ExperienceLevel,
   GoalType,
   LifestyleTag,
   Sex,
@@ -28,6 +29,7 @@ interface Draft {
   weightKg: number;
   targetWeightKg: number;
   activityLevel: ActivityLevel;
+  experience: ExperienceLevel;
   preferredActivities: WorkoutType[];
   weeklyWorkoutTarget: number;
   goal: GoalType;
@@ -79,6 +81,7 @@ export default function Onboarding() {
     weightKg: 80,
     targetWeightKg: 75,
     activityLevel: 'moderate',
+    experience: 'beginner',
     preferredActivities: ['gym', 'run'],
     weeklyWorkoutTarget: 4,
     goal: 'recomp',
@@ -135,6 +138,7 @@ export default function Onboarding() {
       weightKg: draft.weightKg,
       targetWeightKg: draft.targetWeightKg,
       activityLevel: draft.activityLevel,
+      experience: draft.experience,
       goal: draft.goal,
       weeklyWorkoutTarget: draft.weeklyWorkoutTarget,
       preferredActivities: draft.preferredActivities,
@@ -285,6 +289,22 @@ export default function Onboarding() {
                   label={`${n}`}
                   selected={draft.weeklyWorkoutTarget === n}
                   onPress={() => set({ weeklyWorkoutTarget: n })}
+                />
+              ))}
+            </View>
+            <Text variant="subtitle" style={{ marginTop: 24, marginBottom: 4 }}>
+              Lifting experience
+            </Text>
+            <Text variant="caption" color="textMuted" style={{ marginBottom: 10 }}>
+              Helps set sensible starting weights in your plans.
+            </Text>
+            <View style={styles.rowWrap}>
+              {(['beginner', 'intermediate', 'advanced'] as ExperienceLevel[]).map((e) => (
+                <Chip
+                  key={e}
+                  label={e[0].toUpperCase() + e.slice(1)}
+                  selected={draft.experience === e}
+                  onPress={() => set({ experience: e })}
                 />
               ))}
             </View>

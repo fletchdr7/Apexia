@@ -4,6 +4,10 @@ export type GoalType = 'lose_fat' | 'build_muscle' | 'recomp' | 'maintain' | 'en
 
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'athlete';
 
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+
+export type WorkoutLocation = 'home' | 'gym';
+
 export type UnitSystem = 'metric' | 'imperial';
 
 export type LifestyleTag =
@@ -24,6 +28,7 @@ export interface UserProfile {
   weightKg: number;
   targetWeightKg?: number;
   activityLevel: ActivityLevel;
+  experience?: ExperienceLevel;
   goal: GoalType;
   weeklyWorkoutTarget: number;
   preferredActivities: WorkoutType[];
@@ -156,6 +161,29 @@ export interface Equipment {
   exampleExercises?: string[];
   howToUse?: string;
   source: 'catalog' | 'scan' | 'manual';
+}
+
+export interface PlannedExercise {
+  name: string;
+  equipment?: string;
+  sets: number;
+  reps: string; // e.g. "8-12" or "12" or "30s"
+  suggestedWeight?: string; // e.g. "20 kg", "bodyweight", "moderate"
+  restSec?: number;
+  muscles?: string[];
+  notes?: string;
+}
+
+export interface WorkoutPlan {
+  title: string;
+  focus: string;
+  location: WorkoutLocation;
+  durationMin: number;
+  warmup: string[];
+  exercises: PlannedExercise[];
+  cooldown: string[];
+  notes?: string;
+  generatedAt: string;
 }
 
 /** AI equipment-scan result returned by the vision endpoint. */

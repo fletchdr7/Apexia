@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,13 +11,15 @@ import { EQUIPMENT_CATEGORIES } from '@/constants/equipment';
 import { analyzeEquipmentPhoto } from '@/lib/api';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
-import type { EquipmentScanResult } from '@/types';
+import type { EquipmentScanResult, WorkoutLocation } from '@/types';
 
 type Phase = 'capture' | 'analyzing' | 'result';
 
 export default function ScanEquipment() {
   const theme = useTheme();
   const router = useRouter();
+  const params = useLocalSearchParams<{ location?: string }>();
+  const location: WorkoutLocation = params.location === 'home' ? 'home' : 'gym';
   const { addEquipment } = useAppStore();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -57,7 +59,7 @@ export default function ScanEquipment() {
       exampleExercises: result.exampleExercises,
       howToUse: result.howToUse,
       source: 'scan',
-    });
+    }, location);
     router.back();
   };
 

@@ -4,11 +4,11 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, Card, Input, Text } from '@/components';
+import { Button, Card, Chip, Input, Text } from '@/components';
 import { EQUIPMENT_CATALOG, EQUIPMENT_CATEGORIES } from '@/constants/equipment';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
-import type { Equipment, EquipmentCategory } from '@/types';
+import type { Equipment, EquipmentCategory, WorkoutLocation } from '@/types';
 
 const CATEGORY_ORDER: EquipmentCategory[] = [
   'free_weights',
@@ -23,8 +23,11 @@ const CATEGORY_ORDER: EquipmentCategory[] = [
 export default function EquipmentLibrary() {
   const theme = useTheme();
   const router = useRouter();
-  const { customEquipment, selectedEquipmentIds, toggleEquipment, removeEquipment } = useAppStore();
+  const { customEquipment, gymEquipmentIds, homeEquipmentIds, toggleEquipment, removeEquipment } = useAppStore();
   const [query, setQuery] = useState('');
+  const [location, setLocation] = useState<WorkoutLocation>('gym');
+
+  const selectedIds = location === 'gym' ? gymEquipmentIds : homeEquipmentIds;
 
   const all = useMemo<Equipment[]>(() => [...customEquipment, ...EQUIPMENT_CATALOG], [customEquipment]);
 
@@ -45,7 +48,7 @@ export default function EquipmentLibrary() {
     return CATEGORY_ORDER.map((cat) => ({ cat, items: map.get(cat) ?? [] })).filter((g) => g.items.length > 0);
   }, [filtered]);
 
-  const selectedCount = selectedEquipmentIds.length;
+  const selectedCount = selectedIds.length;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
@@ -56,7 +59,13 @@ export default function EquipmentLibrary() {
         <Text variant="heading" style={{ flex: 1 }}>
           Equipment
         </Text>
-        <Button label="Scan" icon="camera" onPress={() => router.push('/equipment/scan')} fullWidth={false} size="sm" />
+        <Button
+          label="Scan"
+          icon="camera"
+          onPress={() => router.push({ pathname: '/equipment/scan', params: { location } })}
+          fullWidth={false}
+          size="sm"
+        />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
@@ -64,14 +73,18 @@ export default function EquipmentLibrary() {
           <View style={styles.row}>
             <Ionicons name="information-circle" size={18} color={theme.colors.brand} />
             <Text variant="label" style={{ marginLeft: 8, flex: 1 }}>
-              Select what you have access to
+              Select what you have at each location
             </Text>
             <Text variant="caption" color="textMuted">
               {selectedCount} selected
             </Text>
           </View>
-          <Text variant="caption" color="textMuted" style={{ marginTop: 6 }}>
-            Can&apos;t find a machine? Tap Scan and the AI will identify it and add it here.
+          <View style={[styles.row, { marginTop: 12, gap: 8 }]}>
+            <Chip label={`Gym (${gymEquipmentIds.length})`} icon="business" selected={location === 'gym'} onPress={() => setLocation('gym')} />
+            <Chip label={`Home (${homeEquipmentIds.length})`} icon="home" selected={location === 'home'} onPress={() => setLocation('home')} />
+          </View>
+          <Text variant="caption" color="textMuted" style={{ marginTop: 10 }}>
+            Choosing {location === 'gym' ? 'Gym' : 'Home'}. Can&apos;t find a machine? Tap Scan and the AI will add it here.
           </Text>
         </Card>
 
@@ -88,9 +101,9 @@ export default function EquipmentLibrary() {
               </Text>
             </View>
             {items.map((e) => {
-              const selected = selectedEquipmentIds.includes(e.id);
+              const selected = selectedIds.includes(e.id);
               return (
-                <Card key={e.id} onPress={() => toggleEquipment(e.id)} style={{ marginBottom: 8 }}>
+                <Card key={e.id} onPress={() => toggleEquipment(e.id, location)} style={{ marginBottom: 8 }}>
                   <View style={styles.row}>
                     <View style={[styles.icon, { backgroundColor: selected ? theme.colors.brandSoft : theme.colors.cardMuted }]}>
                       <Ionicons

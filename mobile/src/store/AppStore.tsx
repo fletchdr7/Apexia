@@ -8,6 +8,7 @@ import type {
   SupplementLog,
   UserProfile,
   WorkoutEntry,
+  WorkoutLocation,
 } from '@/types';
 import { isSameDay } from '@/utils/date';
 import { uid } from '@/utils/id';
@@ -29,8 +30,9 @@ interface PersistedState {
   supplementLogs: SupplementLog[];
   /** Equipment the user scanned/added beyond the built-in catalog. */
   customEquipment: Equipment[];
-  /** Ids (catalog or custom) of equipment the user has access to. */
-  selectedEquipmentIds: string[];
+  /** Ids (catalog or custom) of equipment available at the gym / at home. */
+  gymEquipmentIds: string[];
+  homeEquipmentIds: string[];
   seeded: boolean;
   /** User chose to use the app without an account (local-only, no sync). */
   guestMode: boolean;
@@ -39,7 +41,14 @@ interface PersistedState {
 /** The subset of state that is synced to the cloud (device flags excluded). */
 export type SyncableState = Pick<
   PersistedState,
-  'profile' | 'workouts' | 'foods' | 'supplements' | 'supplementLogs' | 'customEquipment' | 'selectedEquipmentIds'
+  | 'profile'
+  | 'workouts'
+  | 'foods'
+  | 'supplements'
+  | 'supplementLogs'
+  | 'customEquipment'
+  | 'gymEquipmentIds'
+  | 'homeEquipmentIds'
 >;
 
 interface AppStoreValue extends PersistedState {
@@ -62,9 +71,9 @@ interface AppStoreValue extends PersistedState {
   removeSupplement: (id: string) => void;
   logSupplement: (supplement: Supplement, dose?: string) => void;
   // equipment
-  addEquipment: (e: Omit<Equipment, 'id'>) => Equipment;
+  addEquipment: (e: Omit<Equipment, 'id'>, location?: WorkoutLocation) => Equipment;
   removeEquipment: (id: string) => void;
-  toggleEquipment: (id: string) => void;
+  toggleEquipment: (id: string, location: WorkoutLocation) => void;
   // derived helpers
   todaysFoods: () => FoodEntry[];
   todaysWorkouts: () => WorkoutEntry[];
@@ -78,10 +87,23 @@ const initialState: PersistedState = {
   supplements: [],
   supplementLogs: [],
   customEquipment: [],
-  selectedEquipmentIds: [],
+  gymEquipmentIds: [],
+  homeEquipmentIds: [],
   seeded: false,
   guestMode: false,
 };
+
+/** Backfill fields added in newer versions (and migrate the old equipment list). */
+function normalize(raw: Partial<PersistedState> & { selectedEquipmentIds?: string[] }): PersistedState {
+  const merged = { ...initialState, ...raw } as PersistedState;
+  if ((!raw.gymEquipmentIds || raw.gymEquipmentIds.length === 0) && raw.selectedEquipmentIds?.length) {
+    merged.gymEquipmentIds = raw.selectedEquipmentIds;
+  }
+  merged.gymEquipmentIds = merged.gymEquipmentIds ?? [];
+  merged.homeEquipmentIds = merged.homeEquipmentIds ?? [];
+  merged.customEquipment = merged.customEquipment ?? [];
+  return merged;
+}
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
 
@@ -94,7 +116,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          setState({ ...initialState, ...(JSON.parse(raw) as PersistedState) });
+          setState(normalize(JSON.parse(raw)));
         }
       } catch {
         // ignore corrupt storage; start fresh
@@ -139,7 +161,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   // Replace the synced portion of state (used when loading cloud data on sign-in).
   const hydrate = useCallback((next: SyncableState) => {
-    setState((s) => ({ ...s, ...next, seeded: true }));
+    setState((s) => normalize({ ...s, ...next, seeded: true }));
   }, []);
 
   const setGuestMode = useCallback((guestMode: boolean) => {
@@ -187,12 +209,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, supplementLogs: [log, ...s.supplementLogs] }));
   }, []);
 
-  const addEquipment = useCallback((e: Omit<Equipment, 'id'>) => {
+  const addEquipment = useCallback((e: Omit<Equipment, 'id'>, location: WorkoutLocation = 'gym') => {
     const entry: Equipment = { ...e, id: uid('eq_') };
     setState((s) => ({
       ...s,
       customEquipment: [entry, ...s.customEquipment],
-      selectedEquipmentIds: [...s.selectedEquipmentIds, entry.id],
+      gymEquipmentIds: location === 'gym' ? [...s.gymEquipmentIds, entry.id] : s.gymEquipmentIds,
+      homeEquipmentIds: location === 'home' ? [...s.homeEquipmentIds, entry.id] : s.homeEquipmentIds,
     }));
     return entry;
   }, []);
@@ -201,17 +224,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({
       ...s,
       customEquipment: s.customEquipment.filter((x) => x.id !== id),
-      selectedEquipmentIds: s.selectedEquipmentIds.filter((x) => x !== id),
+      gymEquipmentIds: s.gymEquipmentIds.filter((x) => x !== id),
+      homeEquipmentIds: s.homeEquipmentIds.filter((x) => x !== id),
     }));
   }, []);
 
-  const toggleEquipment = useCallback((id: string) => {
-    setState((s) => ({
-      ...s,
-      selectedEquipmentIds: s.selectedEquipmentIds.includes(id)
-        ? s.selectedEquipmentIds.filter((x) => x !== id)
-        : [...s.selectedEquipmentIds, id],
-    }));
+  const toggleEquipment = useCallback((id: string, location: WorkoutLocation) => {
+    setState((s) => {
+      const key = location === 'home' ? 'homeEquipmentIds' : 'gymEquipmentIds';
+      const list = s[key];
+      const nextList = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+      return { ...s, [key]: nextList };
+    });
   }, []);
 
   const todaysFoods = useCallback(() => state.foods.filter((f) => isSameDay(f.loggedAt)), [state.foods]);
@@ -231,7 +255,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       supplements: state.supplements,
       supplementLogs: state.supplementLogs,
       customEquipment: state.customEquipment,
-      selectedEquipmentIds: state.selectedEquipmentIds,
+      gymEquipmentIds: state.gymEquipmentIds,
+      homeEquipmentIds: state.homeEquipmentIds,
     }),
     [
       state.profile,
@@ -240,7 +265,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       state.supplements,
       state.supplementLogs,
       state.customEquipment,
-      state.selectedEquipmentIds,
+      state.gymEquipmentIds,
+      state.homeEquipmentIds,
     ],
   );
 

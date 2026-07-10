@@ -11,7 +11,7 @@ import { isSameDay, relativeDay, timeLabel } from '@/utils/date';
 export default function Workouts() {
   const theme = useTheme();
   const router = useRouter();
-  const { workouts, profile, removeWorkout, selectedEquipmentIds } = useAppStore();
+  const { workouts, profile, removeWorkout, gymEquipmentIds, homeEquipmentIds } = useAppStore();
 
   const now = new Date();
   const weekStart = new Date(now);
@@ -29,7 +29,22 @@ export default function Workouts() {
         <Button label="Log" icon="add" onPress={() => router.push('/workout/log')} fullWidth={false} size="sm" />
       </View>
 
-      <Card style={{ marginTop: 8 }}>
+      <Card onPress={() => router.push('/workout/plan')} style={{ marginTop: 8 }}>
+        <View style={styles.row}>
+          <View style={[styles.icon, { backgroundColor: theme.colors.brand }]}>
+            <Ionicons name="sparkles" size={22} color={theme.colors.onBrand} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text variant="label">Build a workout</Text>
+            <Text variant="caption" color="textMuted">
+              AI plan from your equipment, time & goal
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.colors.textFaint} />
+        </View>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
             <Text variant="caption" color="textMuted">
@@ -69,8 +84,8 @@ export default function Workouts() {
           <View style={{ flex: 1 }}>
             <Text variant="label">My equipment</Text>
             <Text variant="caption" color="textMuted">
-              {selectedEquipmentIds.length > 0
-                ? `${selectedEquipmentIds.length} selected · scan to add more`
+              {gymEquipmentIds.length + homeEquipmentIds.length > 0
+                ? `Gym ${gymEquipmentIds.length} · Home ${homeEquipmentIds.length} · scan to add more`
                 : 'Select what you have, or scan gym equipment to add it'}
             </Text>
           </View>
