@@ -40,6 +40,8 @@ interface PersistedState {
   seeded: boolean;
   /** User chose to use the app without an account (local-only, no sync). */
   guestMode: boolean;
+  /** Whether the user connected Apple Health on this device (device-local). */
+  healthEnabled: boolean;
 }
 
 /** The subset of state that is synced to the cloud (device flags excluded). */
@@ -61,6 +63,7 @@ interface AppStoreValue extends PersistedState {
   snapshot: SyncableState;
   hydrate: (next: SyncableState) => void;
   setGuestMode: (value: boolean) => void;
+  setHealthEnabled: (value: boolean) => void;
   /** Transient plan being run in an active workout session (not persisted). */
   activePlan: WorkoutPlan | null;
   setActivePlan: (plan: WorkoutPlan | null) => void;
@@ -100,6 +103,7 @@ const initialState: PersistedState = {
   exerciseHistory: {},
   seeded: false,
   guestMode: false,
+  healthEnabled: false,
 };
 
 /** Backfill fields added in newer versions (and migrate the old equipment list). */
@@ -177,6 +181,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const setGuestMode = useCallback((guestMode: boolean) => {
     setState((s) => ({ ...s, guestMode }));
+  }, []);
+
+  const setHealthEnabled = useCallback((healthEnabled: boolean) => {
+    setState((s) => ({ ...s, healthEnabled }));
   }, []);
 
   const addWorkout = useCallback((w: Omit<WorkoutEntry, 'id'>) => {
@@ -315,6 +323,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       snapshot,
       hydrate,
       setGuestMode,
+      setHealthEnabled,
       activePlan,
       setActivePlan,
       setProfile,
@@ -340,6 +349,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       snapshot,
       hydrate,
       setGuestMode,
+      setHealthEnabled,
       activePlan,
       setProfile,
       updateProfile,

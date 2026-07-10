@@ -3,9 +3,10 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Card, MacroBar, ProgressRing, Screen, SectionHeader, Text } from '@/components';
+import { Card, MacroBar, ProgressRing, Screen, SectionHeader, StatTile, Text } from '@/components';
 import { ACTIVITIES } from '@/constants/activities';
 import { generateDailyPlan } from '@/lib/api';
+import { getTodayHealth, type HealthSnapshot } from '@/lib/health';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { CoachPlan, DailyPlanItem } from '@/types';
@@ -15,13 +16,19 @@ import { clampPct } from '@/utils/nutrition';
 export default function Dashboard() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, todaysNutrition, todaysWorkouts, workouts } = useAppStore();
+  const { profile, todaysNutrition, todaysWorkouts, workouts, healthEnabled } = useAppStore();
   const [plan, setPlan] = useState<CoachPlan | null>(null);
   const [doneItems, setDoneItems] = useState<Record<string, boolean>>({});
+  const [health, setHealth] = useState<HealthSnapshot | null>(null);
 
   useEffect(() => {
     generateDailyPlan(profile).then(setPlan).catch(() => undefined);
   }, [profile]);
+
+  useEffect(() => {
+    if (healthEnabled) getTodayHealth().then(setHealth).catch(() => undefined);
+    else setHealth(null);
+  }, [healthEnabled]);
 
   const nutrition = todaysNutrition();
   const targets = profile?.targets;
@@ -75,6 +82,28 @@ export default function Dashboard() {
         <QuickAction icon="flask" label="Supplement" tint={theme.colors.fat} onPress={() => router.push('/supplements')} />
         <QuickAction icon="sparkles" label="Ask coach" tint={theme.colors.warning} onPress={() => router.push('/(tabs)/coach')} />
       </View>
+
+      {/* Apple Health */}
+      {healthEnabled && health && (health.steps != null || health.activeEnergyKcal != null) ? (
+        <>
+          <SectionHeader title="Apple Health" />
+          <View style={{ flexDirection: 'row' }}>
+            <StatTile
+              icon="footsteps"
+              label="Steps"
+              value={health.steps != null ? health.steps.toLocaleString() : '—'}
+              tint={theme.colors.info}
+            />
+            <View style={{ width: 12 }} />
+            <StatTile
+              icon="flame"
+              label="Active kcal"
+              value={health.activeEnergyKcal != null ? String(health.activeEnergyKcal) : '—'}
+              tint={theme.colors.fat}
+            />
+          </View>
+        </>
+      ) : null}
 
       {/* Today's plan */}
       <SectionHeader title="Today's plan" actionLabel="Refresh" onAction={() => generateDailyPlan(profile).then(setPlan)} />

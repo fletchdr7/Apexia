@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button, Card, Chip, Screen, SectionHeader, Text } from '@/components';
 import { config } from '@/lib/config';
+import { getLatestBodyMassKg, isHealthAvailable, requestHealthPermissions } from '@/lib/health';
 import { useAppStore } from '@/store/AppStore';
 import { useAuth } from '@/store/AuthContext';
 import { useTheme } from '@/theme';
@@ -13,12 +15,36 @@ import { formatHeight, formatWeight } from '@/utils/units';
 export default function Profile() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, resetAll, supplements, updateProfile } = useAppStore();
+  const { profile, resetAll, supplements, updateProfile, healthEnabled, setHealthEnabled } = useAppStore();
   const { configured, session, email, signOut } = useAuth();
+  const [healthBusy, setHealthBusy] = useState(false);
+  const healthSupported = Platform.OS === 'ios' && isHealthAvailable();
 
   const handleSignOut = async () => {
     await signOut();
     router.replace('/');
+  };
+
+  const connectHealth = async () => {
+    setHealthBusy(true);
+    const ok = await requestHealthPermissions();
+    setHealthBusy(false);
+    setHealthEnabled(ok);
+    if (!ok) {
+      Alert.alert('Apple Health', 'Permission wasn\u2019t granted. You can enable it later in Settings › Health › Data Access & Devices › Apexia.');
+    }
+  };
+
+  const importWeight = async () => {
+    setHealthBusy(true);
+    const kg = await getLatestBodyMassKg();
+    setHealthBusy(false);
+    if (kg && profile) {
+      updateProfile({ weightKg: kg });
+      Alert.alert('Apple Health', `Imported your latest weight: ${formatWeight(kg, profile.units)}.`);
+    } else {
+      Alert.alert('Apple Health', 'No recent weight found in Apple Health.');
+    }
   };
 
   if (!profile) {
@@ -151,6 +177,35 @@ export default function Profile() {
                   icon="cloud-upload-outline"
                   onPress={() => router.push('/(auth)/sign-in')}
                 />
+              </>
+            )}
+          </Card>
+        </>
+      ) : null}
+
+      {healthSupported ? (
+        <>
+          <SectionHeader title="Apple Health" />
+          <Card>
+            {healthEnabled ? (
+              <>
+                <View style={[styles.aboutRow, { marginBottom: 12 }]}>
+                  <Text color="textMuted">Status</Text>
+                  <Text variant="label" style={{ color: theme.colors.success }}>
+                    Connected
+                  </Text>
+                </View>
+                <Button label="Import weight from Health" icon="download-outline" variant="secondary" onPress={importWeight} loading={healthBusy} />
+                <Pressable onPress={() => setHealthEnabled(false)} style={{ marginTop: 12, alignItems: 'center' }}>
+                  <Text style={{ color: theme.colors.danger }}>Disconnect</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text color="textMuted" style={{ marginBottom: 12 }}>
+                  Connect Apple Health to show your steps and active energy on Today, and import your latest weight.
+                </Text>
+                <Button label="Connect Apple Health" icon="heart" onPress={connectHealth} loading={healthBusy} />
               </>
             )}
           </Card>

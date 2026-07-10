@@ -56,6 +56,13 @@
         {
           "photosPermission": "Apexia lets you pick photos of meals and supplement labels to analyze their nutrition."
         }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Apexia reads your steps, active energy, and body weight to personalize your coaching and dashboard.",
+          "NSHealthUpdateUsageDescription": "Apexia can save your logged workouts to Apple Health."
+        }
       ]
     ],
     "experiments": {
