@@ -65,7 +65,7 @@ of day‑to‑day development.
 ## Stage 3 — TestFlight & App Store
 
 1. In [App Store Connect](https://appstoreconnect.apple.com), create the app once
-   (name **Apexia**, bundle ID `com.apexia.app` — matches `mobile/app.json`).
+   (name **Apexia**, bundle ID `com.arrowbaysolutions.apexia` — matches `mobile/app.json`).
 
 2. Build for production and submit:
 
@@ -84,15 +84,16 @@ of day‑to‑day development.
 
 These live in `mobile/app.json`:
 
-- `expo.ios.bundleIdentifier` → `com.apexia.app` (change to your own domain if you
-  prefer, e.g. `com.yourname.apexia`).
+- `expo.ios.bundleIdentifier` → `com.arrowbaysolutions.apexia` (change to your own
+  domain if you prefer, e.g. `com.yourname.apexia`).
 - `expo.name` / `expo.slug` → app display name and Expo project slug.
 - Camera/photo permission strings are set under `expo.ios.infoPlist`.
 
 ## Common gotchas
 
-- **Apple team / bundle ID conflicts:** bundle IDs are globally unique. If
-  `com.apexia.app` is taken, change it in `app.json` before your first build.
+- **Apple team / bundle ID conflicts:** bundle IDs are globally unique. If your
+  chosen ID is taken, change `expo.ios.bundleIdentifier` in `app.json` before your
+  first build.
 - **Push notifications / capabilities:** add these in `app.json` and EAS will
   provision them; no Xcode needed.
 - **Environment variables:** anything the app needs at runtime must be an

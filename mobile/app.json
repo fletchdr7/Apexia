@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.apexia.app",
+      "bundleIdentifier": "com.arrowbaysolutions.apexia",
       "infoPlist": {
         "NSCameraUsageDescription": "Apexia uses the camera to scan food labels and cooked meals so it can estimate their nutrition.",
         "NSPhotoLibraryUsageDescription": "Apexia lets you pick photos of meals and supplement labels to analyze their nutrition.",
@@ -23,7 +23,7 @@
       }
     },
     "android": {
-      "package": "com.apexia.app",
+      "package": "com.arrowbaysolutions.apexia",
       "adaptiveIcon": {
         "backgroundColor": "#ECFDF5",
         "foregroundImage": "./assets/android-icon-foreground.png",
