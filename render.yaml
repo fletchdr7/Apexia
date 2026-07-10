@@ -1,0 +1,17 @@
+# Render Blueprint for the Apexia AI backend.
+# In Render: New + -> Blueprint -> connect this repo -> it reads this file.
+# Then set OPENAI_API_KEY in the service's Environment settings.
+services:
+  - type: web
+    name: apexia-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "*"

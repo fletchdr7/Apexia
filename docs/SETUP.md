@@ -127,6 +127,25 @@ EXPO_PUBLIC_AI_API_URL=http://<your-computer-LAN-ip>:8000
 > `uvicorn app.main:app` — no WSGI wrapper needed, and outbound access is open by
 > default on those hosts.
 
+### Deploy on Render (no custom domain needed)
+
+Handy when your `username.pythonanywhere.com` subdomain is already used by another
+app, since PythonAnywhere only gives you one free subdomain.
+
+1. Push this repo to GitHub (already done) and sign in at https://render.com.
+2. **New +** → **Blueprint** → connect the repo. Render reads `render.yaml` and
+   creates the `apexia-api` web service (root dir `backend`, uvicorn start command).
+   - Or do it manually: **New + → Web Service**, Root Directory `backend`,
+     Build `pip install -r requirements.txt`,
+     Start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+3. In the service's **Environment**, add `OPENAI_API_KEY = sk-...`.
+4. Deploy, then open `https://<service>.onrender.com/health` → expects
+   `{"status":"ok","openai":true}`.
+5. Put that URL in the app as `EXPO_PUBLIC_AI_API_URL`.
+
+> Render's free tier sleeps after ~15 min idle, so the first request after a nap
+> takes ~30–60s to wake. Fine for personal use; upgrade for always‑on.
+
 ---
 
 ## 4. Ship to iOS
