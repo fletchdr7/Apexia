@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   CoachPlan,
+  EquipmentScanResult,
   FoodScanResult,
   Supplement,
   UserProfile,
@@ -93,6 +94,25 @@ export async function analyzeSupplementPhoto(imageBase64: string): Promise<Omit<
   }
   const sample = COMMON_SUPPLEMENTS[0];
   return { ...sample, name: sample.name };
+}
+
+// ---------------------------------------------------------------------------
+// Equipment vision
+// ---------------------------------------------------------------------------
+
+export async function analyzeEquipmentPhoto(imageBase64: string): Promise<EquipmentScanResult> {
+  if (config.hasAiBackend) {
+    return post<EquipmentScanResult>('/vision/equipment', { image: imageBase64 });
+  }
+  return {
+    name: 'Unrecognized equipment',
+    category: 'machine',
+    primaryMuscles: [],
+    description: 'Connect the AI backend to identify gym equipment from a photo.',
+    exampleExercises: [],
+    confidence: 0.4,
+    notes: 'Demo mode — connect the AI backend for real equipment recognition.',
+  };
 }
 
 export function analyzeSupplementForGoal(

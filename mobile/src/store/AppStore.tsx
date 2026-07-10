@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type {
+  Equipment,
   FoodEntry,
   Supplement,
   SupplementLog,
@@ -26,6 +27,10 @@ interface PersistedState {
   foods: FoodEntry[];
   supplements: Supplement[];
   supplementLogs: SupplementLog[];
+  /** Equipment the user scanned/added beyond the built-in catalog. */
+  customEquipment: Equipment[];
+  /** Ids (catalog or custom) of equipment the user has access to. */
+  selectedEquipmentIds: string[];
   seeded: boolean;
   /** User chose to use the app without an account (local-only, no sync). */
   guestMode: boolean;
@@ -34,7 +39,7 @@ interface PersistedState {
 /** The subset of state that is synced to the cloud (device flags excluded). */
 export type SyncableState = Pick<
   PersistedState,
-  'profile' | 'workouts' | 'foods' | 'supplements' | 'supplementLogs'
+  'profile' | 'workouts' | 'foods' | 'supplements' | 'supplementLogs' | 'customEquipment' | 'selectedEquipmentIds'
 >;
 
 interface AppStoreValue extends PersistedState {
@@ -56,6 +61,10 @@ interface AppStoreValue extends PersistedState {
   addSupplement: (s: Omit<Supplement, 'id'>) => Supplement;
   removeSupplement: (id: string) => void;
   logSupplement: (supplement: Supplement, dose?: string) => void;
+  // equipment
+  addEquipment: (e: Omit<Equipment, 'id'>) => Equipment;
+  removeEquipment: (id: string) => void;
+  toggleEquipment: (id: string) => void;
   // derived helpers
   todaysFoods: () => FoodEntry[];
   todaysWorkouts: () => WorkoutEntry[];
@@ -68,6 +77,8 @@ const initialState: PersistedState = {
   foods: [],
   supplements: [],
   supplementLogs: [],
+  customEquipment: [],
+  selectedEquipmentIds: [],
   seeded: false,
   guestMode: false,
 };
@@ -176,6 +187,33 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, supplementLogs: [log, ...s.supplementLogs] }));
   }, []);
 
+  const addEquipment = useCallback((e: Omit<Equipment, 'id'>) => {
+    const entry: Equipment = { ...e, id: uid('eq_') };
+    setState((s) => ({
+      ...s,
+      customEquipment: [entry, ...s.customEquipment],
+      selectedEquipmentIds: [...s.selectedEquipmentIds, entry.id],
+    }));
+    return entry;
+  }, []);
+
+  const removeEquipment = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      customEquipment: s.customEquipment.filter((x) => x.id !== id),
+      selectedEquipmentIds: s.selectedEquipmentIds.filter((x) => x !== id),
+    }));
+  }, []);
+
+  const toggleEquipment = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      selectedEquipmentIds: s.selectedEquipmentIds.includes(id)
+        ? s.selectedEquipmentIds.filter((x) => x !== id)
+        : [...s.selectedEquipmentIds, id],
+    }));
+  }, []);
+
   const todaysFoods = useCallback(() => state.foods.filter((f) => isSameDay(f.loggedAt)), [state.foods]);
   const todaysWorkouts = useCallback(
     () => state.workouts.filter((w) => isSameDay(w.performedAt)),
@@ -192,8 +230,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       foods: state.foods,
       supplements: state.supplements,
       supplementLogs: state.supplementLogs,
+      customEquipment: state.customEquipment,
+      selectedEquipmentIds: state.selectedEquipmentIds,
     }),
-    [state.profile, state.workouts, state.foods, state.supplements, state.supplementLogs],
+    [
+      state.profile,
+      state.workouts,
+      state.foods,
+      state.supplements,
+      state.supplementLogs,
+      state.customEquipment,
+      state.selectedEquipmentIds,
+    ],
   );
 
   const value = useMemo<AppStoreValue>(
@@ -213,6 +261,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addSupplement,
       removeSupplement,
       logSupplement,
+      addEquipment,
+      removeEquipment,
+      toggleEquipment,
       todaysFoods,
       todaysWorkouts,
       todaysNutrition,
@@ -233,6 +284,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addSupplement,
       removeSupplement,
       logSupplement,
+      addEquipment,
+      removeEquipment,
+      toggleEquipment,
       todaysFoods,
       todaysWorkouts,
       todaysNutrition,

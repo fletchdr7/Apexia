@@ -65,6 +65,7 @@ export default function RootLayout() {
             <Stack.Screen name="nutrition/scan" options={{ presentation: 'fullScreenModal' }} />
             <Stack.Screen name="nutrition/log-food" options={{ presentation: 'modal' }} />
             <Stack.Screen name="supplements/analyze" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="equipment/scan" options={{ presentation: 'fullScreenModal' }} />
             </Stack>
           </AppStoreProvider>
         </AuthProvider>

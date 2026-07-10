@@ -11,7 +11,7 @@ import { isSameDay, relativeDay, timeLabel } from '@/utils/date';
 export default function Workouts() {
   const theme = useTheme();
   const router = useRouter();
-  const { workouts, profile, removeWorkout } = useAppStore();
+  const { workouts, profile, removeWorkout, selectedEquipmentIds } = useAppStore();
 
   const now = new Date();
   const weekStart = new Date(now);
@@ -59,6 +59,24 @@ export default function Workouts() {
         <View style={{ width: 12 }} />
         <StatTile icon="flame" label="Calories" value={`${weekCalories}`} tint={theme.colors.fat} />
       </View>
+
+      <SectionHeader title="Equipment" actionLabel="Manage" onAction={() => router.push('/equipment')} />
+      <Card onPress={() => router.push('/equipment')}>
+        <View style={styles.row}>
+          <View style={[styles.icon, { backgroundColor: theme.colors.brandSoft }]}>
+            <Ionicons name="barbell" size={22} color={theme.colors.brand} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text variant="label">My equipment</Text>
+            <Text variant="caption" color="textMuted">
+              {selectedEquipmentIds.length > 0
+                ? `${selectedEquipmentIds.length} selected · scan to add more`
+                : 'Select what you have, or scan gym equipment to add it'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.colors.textFaint} />
+        </View>
+      </Card>
 
       <SectionHeader title="History" />
       {workouts.length === 0 ? (

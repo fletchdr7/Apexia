@@ -138,6 +138,38 @@ export interface SupplementLog {
   dose: string;
 }
 
+export type EquipmentCategory =
+  | 'free_weights'
+  | 'machine'
+  | 'cable'
+  | 'cardio'
+  | 'bodyweight'
+  | 'accessory'
+  | 'other';
+
+export interface Equipment {
+  id: string;
+  name: string;
+  category: EquipmentCategory;
+  primaryMuscles: string[];
+  description?: string;
+  exampleExercises?: string[];
+  howToUse?: string;
+  source: 'catalog' | 'scan' | 'manual';
+}
+
+/** AI equipment-scan result returned by the vision endpoint. */
+export interface EquipmentScanResult {
+  name: string;
+  category: EquipmentCategory;
+  primaryMuscles: string[];
+  description: string;
+  exampleExercises: string[];
+  howToUse?: string;
+  confidence: number;
+  notes?: string;
+}
+
 export type ChatRole = 'user' | 'assistant' | 'system';
 
 export interface ChatMessage {
