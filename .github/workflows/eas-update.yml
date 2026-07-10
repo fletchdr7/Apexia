@@ -48,7 +48,8 @@ jobs:
           # Passed via env (not inlined) so multi-line messages / special
           # characters can't break the shell command.
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+          CI: "1"
         run: |
           MESSAGE="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
           if [ -z "$MESSAGE" ]; then MESSAGE="Update ${GITHUB_SHA:0:7}"; fi
-          eas update --branch preview --message "$MESSAGE" --non-interactive
+          eas update --branch preview --platform ios --message "$MESSAGE"
