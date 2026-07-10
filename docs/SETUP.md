@@ -77,10 +77,38 @@ EXPO_PUBLIC_AI_API_URL=http://<your-computer-LAN-ip>:8000
 
 ### Deploy on PythonAnywhere (WSGI)
 
-1. Upload/clone this repo to PythonAnywhere and create a **virtualenv**, then
-   `pip install -r backend/requirements.txt`.
-2. Create a new **Web app** → *Manual configuration* → your Python version.
-3. Edit the WSGI configuration file so it imports the app:
+> ⚠️ **Free tier caveat:** PythonAnywhere **free** accounts can only make outbound
+> internet requests to a small allowlist of sites, and `api.openai.com` is **not**
+> on it — so OpenAI calls will fail on a free account. To use real AI you need a
+> paid PythonAnywhere plan (the $5/mo "Hacker" tier lifts the restriction), or
+> host the backend somewhere with open outbound access (Render/Railway/Fly.io).
+> Everything else (deploy, `/health`) still works on the free tier.
+
+1. Open a **Bash console** on PythonAnywhere and get the code:
+
+   ```bash
+   git clone https://github.com/fletchdr7/Apexia.git
+   cd Apexia
+   git checkout cursor/apexia-fitness-app-foundation-e8c8   # until the PR is merged to main
+   ```
+
+2. Create a **virtualenv** and install dependencies:
+
+   ```bash
+   mkvirtualenv apexia --python=python3.10
+   pip install -r backend/requirements.txt
+   ```
+
+3. Add your OpenAI key by creating `backend/.env`:
+
+   ```bash
+   echo "OPENAI_API_KEY=sk-...your-key..." > ~/Apexia/backend/.env
+   ```
+
+4. Create a new **Web app** → *Manual configuration* → the same Python version.
+5. In the Web tab, set **Virtualenv** to `/home/<youruser>/.virtualenvs/apexia`.
+6. Edit the **WSGI configuration file** (link in the Web tab): delete the sample
+   content and replace it with:
 
    ```python
    import sys
@@ -90,12 +118,14 @@ EXPO_PUBLIC_AI_API_URL=http://<your-computer-LAN-ip>:8000
    from wsgi import application  # noqa
    ```
 
-4. Set environment variables (e.g. `OPENAI_API_KEY`) in the Web tab, then
-   **Reload** the web app. Your API is live at `https://<youruser>.pythonanywhere.com`.
-5. Put that URL in `mobile/.env` as `EXPO_PUBLIC_AI_API_URL`.
+7. Click **Reload**. Visit `https://<youruser>.pythonanywhere.com/health` — it
+   should return `{"status":"ok","openai":true,...}`.
+8. Put that base URL in the app as `EXPO_PUBLIC_AI_API_URL` (see the app config
+   section above / `eas.json`).
 
 > Prefer ASGI hosting (Render, Railway, Fly.io)? Just run
-> `uvicorn app.main:app` — no WSGI wrapper needed.
+> `uvicorn app.main:app` — no WSGI wrapper needed, and outbound access is open by
+> default on those hosts.
 
 ---
 

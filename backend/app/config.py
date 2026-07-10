@@ -1,12 +1,18 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Absolute path to backend/.env so it loads no matter what the process's working
+# directory is (important on hosts like PythonAnywhere where CWD isn't backend/).
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+ENV_FILE = BACKEND_DIR / ".env"
 
 
 class Settings(BaseSettings):
     """Runtime configuration read from environment variables / .env."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(ENV_FILE), env_file_encoding="utf-8", extra="ignore")
 
     # OpenAI (or compatible) API. If unset the backend falls back to heuristics.
     openai_api_key: str = ""
