@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Apexia",
+    "slug": "apexia",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "apexia",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.apexia.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Apexia uses the camera to scan food labels and cooked meals so it can estimate their nutrition.",
+        "NSPhotoLibraryUsageDescription": "Apexia lets you pick photos of meals and supplement labels to analyze their nutrition.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.apexia.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#ECFDF5",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Apexia uses the camera to scan food labels and cooked meals so it can estimate their nutrition."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Apexia lets you pick photos of meals and supplement labels to analyze their nutrition."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {}
+    }
+  }
+}

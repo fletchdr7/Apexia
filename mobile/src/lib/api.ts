@@ -1,0 +1,220 @@
+import type {
+  ChatMessage,
+  CoachPlan,
+  FoodScanResult,
+  Supplement,
+  UserProfile,
+} from '@/types';
+import { COMMON_SUPPLEMENTS, GOAL_SUPPLEMENT_HINTS } from '@/constants/supplements';
+import { uid } from '@/utils/id';
+import { goalLabel } from '@/utils/nutrition';
+import { config } from './config';
+import { supabase } from './supabase';
+
+/**
+ * The AI service layer.
+ *
+ * Every function first tries the configured Python AI backend. If the backend
+ * is not configured (demo mode) it falls back to a deterministic, genuinely
+ * useful local heuristic so the app is fully explorable without any servers.
+ */
+
+async function authHeader(): Promise<Record<string, string>> {
+  if (!supabase) return {};
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const headers = { 'Content-Type': 'application/json', ...(await authHeader()) };
+  const res = await fetch(`${config.aiApiBaseUrl}${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`AI request failed (${res.status}): ${text}`);
+  }
+  return (await res.json()) as T;
+}
+
+// ---------------------------------------------------------------------------
+// Food vision
+// ---------------------------------------------------------------------------
+
+export async function analyzeFoodPhoto(
+  imageBase64: string,
+  mode: 'label' | 'plate',
+): Promise<FoodScanResult> {
+  if (config.hasAiBackend) {
+    return post<FoodScanResult>('/vision/food', { image: imageBase64, mode });
+  }
+  return mockFoodScan(mode);
+}
+
+function mockFoodScan(mode: 'label' | 'plate'): FoodScanResult {
+  if (mode === 'label') {
+    return {
+      name: 'Scanned nutrition label',
+      items: [
+        {
+          name: 'Packaged food (per serving)',
+          portion: '1 serving',
+          nutrients: { calories: 210, proteinG: 8, carbsG: 27, fatG: 7, fiberG: 3, sugarG: 9, sodiumMg: 180 },
+        },
+      ],
+      total: { calories: 210, proteinG: 8, carbsG: 27, fatG: 7, fiberG: 3, sugarG: 9, sodiumMg: 180 },
+      confidence: 0.7,
+      notes: 'Demo estimate. Connect the AI backend for real OCR of the label.',
+    };
+  }
+  return {
+    name: 'Chicken, veg & carb plate',
+    items: [
+      { name: 'Grilled chicken breast', portion: '~150 g', nutrients: { calories: 240, proteinG: 45, carbsG: 0, fatG: 6 } },
+      { name: 'Mixed vegetables', portion: '~120 g', nutrients: { calories: 70, proteinG: 3, carbsG: 12, fatG: 1, fiberG: 5 } },
+      { name: 'Rice / carb', portion: '~1 cup', nutrients: { calories: 205, proteinG: 4, carbsG: 45, fatG: 1 } },
+    ],
+    total: { calories: 515, proteinG: 52, carbsG: 57, fatG: 8, fiberG: 5 },
+    confidence: 0.68,
+    notes: 'Demo estimate. Connect the AI backend for a vision model that reads your actual plate.',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Supplement analysis
+// ---------------------------------------------------------------------------
+
+export async function analyzeSupplementPhoto(imageBase64: string): Promise<Omit<Supplement, 'id'>> {
+  if (config.hasAiBackend) {
+    return post<Omit<Supplement, 'id'>>('/vision/supplement', { image: imageBase64 });
+  }
+  const sample = COMMON_SUPPLEMENTS[0];
+  return { ...sample, name: sample.name };
+}
+
+export function analyzeSupplementForGoal(
+  supplement: Omit<Supplement, 'id'>,
+  profile: UserProfile | null,
+): { goalFit: number; verdict: string } {
+  const goal = profile?.goal ?? 'maintain';
+  const recommended = GOAL_SUPPLEMENT_HINTS[goal];
+  const match = recommended.some((n) => supplement.name.toLowerCase().includes(n.toLowerCase().split(' ')[0]));
+  const goalFit = match ? 0.9 : supplement.goalFit ?? 0.5;
+  const verdict = match
+    ? `Strong fit for your goal to ${goalLabel(goal).toLowerCase()}.`
+    : `Reasonable general-health choice, but not a top priority for ${goalLabel(goal).toLowerCase()}.`;
+  return { goalFit, verdict };
+}
+
+// ---------------------------------------------------------------------------
+// Coach chat
+// ---------------------------------------------------------------------------
+
+export async function chatWithCoach(
+  messages: ChatMessage[],
+  profile: UserProfile | null,
+): Promise<ChatMessage> {
+  if (config.hasAiBackend) {
+    const reply = await post<{ content: string }>('/coach/chat', {
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      profile,
+    });
+    return { id: uid('m_'), role: 'assistant', content: reply.content, createdAt: new Date().toISOString() };
+  }
+  return {
+    id: uid('m_'),
+    role: 'assistant',
+    content: localCoachReply(messages, profile),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function localCoachReply(messages: ChatMessage[], profile: UserProfile | null): string {
+  const last = [...messages].reverse().find((m) => m.role === 'user')?.content.toLowerCase() ?? '';
+  const name = profile?.displayName ? `, ${profile.displayName}` : '';
+  const t = profile?.targets;
+
+  if (/meal|eat|food|dinner|lunch|breakfast/.test(last)) {
+    return `Here's a simple, high-protein idea${name}: grilled chicken or tofu, a fist of rice or potato, and a big handful of veg. ${
+      t ? `Aim for roughly ${t.proteinG}g protein across the day.` : ''
+    } Keep it flexible — if today is chaotic, a Greek yogurt + fruit or a protein shake still counts as a win.`;
+  }
+  if (/workout|train|exercise|gym|run|lift/.test(last)) {
+    return `No-stress plan${name}: if you have 20–40 minutes, do a full-body circuit (squat, push, pull, core) or a brisk run. Missed yesterday? No guilt — just do today. Consistency beats perfection.`;
+  }
+  if (/supplement|creatine|protein|vitamin/.test(last)) {
+    const goal = profile?.goal ?? 'maintain';
+    return `For your goal, the essentials are usually protein powder (to hit targets) and creatine (5g daily). ${GOAL_SUPPLEMENT_HINTS[goal].slice(0, 3).join(', ')} are solid picks. Add vitamin D and omega-3 for general health.`;
+  }
+  if (/tired|busy|stress|time|kids|work/.test(last)) {
+    return `Totally understandable${name}. On hectic days, shrink the goal: a 10-minute walk, one solid protein-forward meal, and water. Small anchors keep momentum without the pressure of a perfect routine.`;
+  }
+  return `I'm your Apexia coach${name}. Ask me about meals, workouts, supplements, or how to stay on track on a busy day. ${
+    t ? `Today's targets: ${t.calories} kcal, ${t.proteinG}g protein.` : ''
+  }`;
+}
+
+// ---------------------------------------------------------------------------
+// Daily plan generation
+// ---------------------------------------------------------------------------
+
+export async function generateDailyPlan(profile: UserProfile | null): Promise<CoachPlan> {
+  if (config.hasAiBackend && profile) {
+    return post<CoachPlan>('/coach/plan', { profile });
+  }
+  return localDailyPlan(profile);
+}
+
+function localDailyPlan(profile: UserProfile | null): CoachPlan {
+  const goal = profile?.goal ?? 'maintain';
+  const t = profile?.targets;
+  const supps = GOAL_SUPPLEMENT_HINTS[goal].slice(0, 2);
+
+  return {
+    summary: profile
+      ? `A balanced day tuned to ${goalLabel(goal).toLowerCase()} that flexes around a busy schedule.`
+      : 'Finish onboarding to get a plan tailored to your goals.',
+    focus: goal === 'lose_fat' ? 'Protein + steps' : goal === 'build_muscle' ? 'Protein + progressive lifting' : 'Balance & consistency',
+    generatedAt: new Date().toISOString(),
+    items: [
+      {
+        id: uid('p_'),
+        kind: 'meal',
+        title: 'Protein-forward breakfast',
+        detail: t ? `~${Math.round(t.calories * 0.25)} kcal, 30g+ protein. Eggs or Greek yogurt + fruit.` : 'Eggs or Greek yogurt + fruit.',
+        time: '8:00 AM',
+      },
+      {
+        id: uid('p_'),
+        kind: 'workout',
+        title: goal === 'endurance' ? 'Zone-2 cardio (30–40 min)' : 'Full-body strength (35 min)',
+        detail: 'Short and effective. If today is packed, a 15-min version still counts.',
+        time: '12:30 PM',
+      },
+      {
+        id: uid('p_'),
+        kind: 'meal',
+        title: 'Balanced plate lunch',
+        detail: 'Lean protein + carb + veg. Snap a photo to log it in seconds.',
+        time: '1:30 PM',
+      },
+      {
+        id: uid('p_'),
+        kind: 'supplement',
+        title: `Supplements: ${supps.join(', ')}`,
+        detail: 'Take with a meal. Consistency matters more than timing.',
+        time: '6:00 PM',
+      },
+      {
+        id: uid('p_'),
+        kind: 'habit',
+        title: 'Wind-down + hydration',
+        detail: t ? `Hit ~${(t.waterMl / 1000).toFixed(1)} L water and aim for 7+ hours sleep.` : 'Hydrate and aim for 7+ hours sleep.',
+        time: '9:30 PM',
+      },
+    ],
+  };
+}
