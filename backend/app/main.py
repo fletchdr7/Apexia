@@ -14,6 +14,8 @@ from .schemas import (
     PlanRequest,
     SupplementImageRequest,
     SupplementResult,
+    WorkoutPlan,
+    WorkoutPlanRequest,
 )
 from .security import verify_auth
 
@@ -73,3 +75,8 @@ def coach_chat(req: ChatRequest, _auth=Depends(verify_auth)) -> ChatResponse:
 @app.post("/coach/plan", response_model=CoachPlan)
 def coach_plan(req: PlanRequest, _auth=Depends(verify_auth)) -> CoachPlan:
     return ai.daily_plan(req.profile)
+
+
+@app.post("/coach/workout", response_model=WorkoutPlan)
+def coach_workout(req: WorkoutPlanRequest, _auth=Depends(verify_auth)) -> WorkoutPlan:
+    return ai.generate_workout(req)

@@ -77,6 +77,7 @@ class Profile(BaseModel):
     weightKg: Optional[float] = None
     targetWeightKg: Optional[float] = None
     activityLevel: Optional[str] = None
+    experience: Optional[str] = None
     goal: Optional[GoalType] = None
     weeklyWorkoutTarget: Optional[int] = None
     preferredActivities: list[str] = []
@@ -114,6 +115,42 @@ class ChatResponse(BaseModel):
 
 class PlanRequest(BaseModel):
     profile: Optional[Profile] = None
+
+
+class EquipmentInput(BaseModel):
+    name: str
+    exampleExercises: list[str] = []
+    primaryMuscles: list[str] = []
+
+
+class PlannedExercise(BaseModel):
+    name: str
+    equipment: Optional[str] = None
+    sets: int = 3
+    reps: str = "8-12"
+    suggestedWeight: Optional[str] = None
+    restSec: Optional[int] = None
+    muscles: list[str] = []
+    notes: Optional[str] = None
+
+
+class WorkoutPlan(BaseModel):
+    title: str
+    focus: str
+    location: str = "gym"
+    durationMin: int = 45
+    warmup: list[str] = []
+    exercises: list[PlannedExercise] = []
+    cooldown: list[str] = []
+    notes: Optional[str] = None
+    generatedAt: str
+
+
+class WorkoutPlanRequest(BaseModel):
+    profile: Optional[Profile] = None
+    location: str = "gym"
+    durationMin: int = 45
+    equipment: list[EquipmentInput] = []
 
 
 class DailyPlanItem(BaseModel):

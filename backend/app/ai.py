@@ -19,11 +19,23 @@ from .schemas import (
     ChatMessageIn,
     CoachPlan,
     DailyPlanItem,
+    EquipmentInput,
     EquipmentResult,
     FoodScanResult,
+    PlannedExercise,
     Profile,
     SupplementResult,
+    WorkoutPlan,
+    WorkoutPlanRequest,
 )
+
+GOAL_REP_SCHEME = {
+    "build_muscle": {"sets": 4, "reps": "8-12", "restSec": 90},
+    "lose_fat": {"sets": 3, "reps": "12-15", "restSec": 45},
+    "recomp": {"sets": 3, "reps": "10-12", "restSec": 60},
+    "endurance": {"sets": 3, "reps": "15-20", "restSec": 30},
+    "maintain": {"sets": 3, "reps": "10-12", "restSec": 60},
+}
 
 EQUIPMENT_CATEGORIES = {
     "free_weights",
@@ -383,6 +395,109 @@ def _coach_fallback(messages: list[ChatMessageIn], profile: Optional[Profile]) -
         )
     return (
         f"I'm your Apexia coach{name}. Ask me about meals, workouts, supplements, or staying on track on a busy day."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Workout plan builder
+# ---------------------------------------------------------------------------
+
+
+def generate_workout(req: WorkoutPlanRequest) -> WorkoutPlan:
+    client = _client()
+    if client is not None:
+        plan = _workout_via_ai(client, req)
+        if plan is not None:
+            return plan
+    return _workout_fallback(req)
+
+
+def _workout_via_ai(client, req: WorkoutPlanRequest) -> Optional[WorkoutPlan]:
+    settings = get_settings()
+    p = req.profile
+    equipment_names = [e.name for e in req.equipment]
+    bodyweight = p.weightKg if p and p.weightKg else 75
+    experience = (p.experience if p and p.experience else "beginner")
+    sex = (p.sex if p and p.sex else "male")
+    goal = (p.goal if p and p.goal else "maintain")
+
+    prompt = (
+        f"Build a single {req.location} workout that fits in about {req.durationMin} minutes. "
+        f"Only use these available equipment items: {equipment_names or ['bodyweight only']}. "
+        f"The user: bodyweight {bodyweight} kg, sex {sex}, experience {experience}, goal {goal}. "
+        "Pick an appropriate number of exercises for the time budget (include warm-up and cool-down). "
+        "For each weighted exercise, suggest a CONSERVATIVE starting weight in kg based on their bodyweight "
+        "and experience (bodyweight movements should say 'bodyweight'). Use rep ranges suited to the goal. "
+        "Respond ONLY with JSON: {\"title\": str, \"focus\": str, \"warmup\": [str], "
+        "\"exercises\": [{\"name\": str, \"equipment\": str, \"sets\": int, \"reps\": str, "
+        "\"suggestedWeight\": str, \"restSec\": int, \"muscles\": [str], \"notes\": str}], "
+        "\"cooldown\": [str], \"notes\": str}. Keep notes short; weights are starting estimates to adjust."
+    )
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": _system_prompt(req.profile)},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=1100,
+            temperature=0.5,
+        )
+        data = _extract_json(resp.choices[0].message.content or "")
+        exercises = [PlannedExercise.model_validate(ex) for ex in data.get("exercises", [])]
+        if not exercises:
+            return None
+        return WorkoutPlan(
+            title=data.get("title", f"{req.location.title()} workout"),
+            focus=data.get("focus", ""),
+            location=req.location,
+            durationMin=req.durationMin,
+            warmup=data.get("warmup", []),
+            exercises=exercises,
+            cooldown=data.get("cooldown", []),
+            notes=data.get("notes"),
+            generatedAt=_now_iso(),
+        )
+    except Exception:
+        logger.exception("Workout plan call failed; using heuristic")
+        return None
+
+
+def _workout_fallback(req: WorkoutPlanRequest) -> WorkoutPlan:
+    goal = (req.profile.goal if req.profile and req.profile.goal else "maintain")
+    scheme = GOAL_REP_SCHEME.get(goal, GOAL_REP_SCHEME["maintain"])
+    # roughly one exercise per ~7 minutes after warm-up/cool-down
+    slots = max(3, min(8, (req.durationMin - 10) // 7))
+
+    pool: list[tuple[str, str]] = []  # (exercise, equipment)
+    for e in req.equipment:
+        for ex in (e.exampleExercises or [e.name]):
+            pool.append((ex, e.name))
+    if not pool:
+        pool = [("Push-ups", "Bodyweight"), ("Bodyweight squats", "Bodyweight"), ("Plank", "Bodyweight"), ("Lunges", "Bodyweight")]
+
+    chosen = pool[:slots]
+    exercises = [
+        PlannedExercise(
+            name=name,
+            equipment=equip,
+            sets=scheme["sets"],
+            reps=scheme["reps"],
+            restSec=scheme["restSec"],
+            suggestedWeight="bodyweight" if equip.lower() == "bodyweight" else "moderate — leave ~2 reps in reserve",
+        )
+        for name, equip in chosen
+    ]
+    return WorkoutPlan(
+        title=f"{req.location.title()} workout",
+        focus="Full body",
+        location=req.location,
+        durationMin=req.durationMin,
+        warmup=["5 min easy cardio", "Dynamic stretches for the muscles you'll train"],
+        exercises=exercises,
+        cooldown=["3-5 min walk", "Stretch the muscles you trained"],
+        notes="Starting estimate — adjust weights so the last 1-2 reps are challenging.",
+        generatedAt=_now_iso(),
     )
 
 
