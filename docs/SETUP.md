@@ -43,8 +43,21 @@ EXPO_PUBLIC_AI_API_URL=https://<your-backend>
 2. Open **SQL Editor** and run the contents of [`supabase/schema.sql`](../supabase/schema.sql).
    This creates all tables, row‑level‑security policies, and a trigger that makes
    a profile row for every new user.
-3. Copy your project's **URL** and **anon key** (Project Settings → API) into
-   `mobile/.env` as shown above.
+3. Also run [`supabase/sync.sql`](../supabase/sync.sql) — it creates the
+   `user_state` table the app uses for cloud sync (email/password auth).
+4. Copy your project's **URL** and **anon (publishable) key** (Project Settings →
+   API) into the app config (`.env` for local dev, `eas.json` for builds).
+5. For the smoothest sign‑up flow, consider turning **off** email confirmation
+   (Supabase → Authentication → Providers → Email → disable "Confirm email").
+   With it on, new users must click a link in their email before they can sign in.
+
+### Auth & sync behavior
+
+- On the first screen you can **create an account**, **sign in**, or **continue
+  without an account** (local‑only, no sync).
+- Signing in pulls your cloud data onto the device; local changes are pushed back
+  automatically (debounced). Your data is stored as a per‑user JSON document in
+  `user_state`, protected by row‑level security.
 
 The schema is ready for the app to sync to. The app currently stores data
 on‑device; wiring the store to Supabase CRUD is the recommended next step and is

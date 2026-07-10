@@ -27,10 +27,21 @@ interface PersistedState {
   supplements: Supplement[];
   supplementLogs: SupplementLog[];
   seeded: boolean;
+  /** User chose to use the app without an account (local-only, no sync). */
+  guestMode: boolean;
 }
+
+/** The subset of state that is synced to the cloud (device flags excluded). */
+export type SyncableState = Pick<
+  PersistedState,
+  'profile' | 'workouts' | 'foods' | 'supplements' | 'supplementLogs'
+>;
 
 interface AppStoreValue extends PersistedState {
   ready: boolean;
+  snapshot: SyncableState;
+  hydrate: (next: SyncableState) => void;
+  setGuestMode: (value: boolean) => void;
   // profile
   setProfile: (profile: UserProfile) => void;
   updateProfile: (patch: Partial<UserProfile>) => void;
@@ -58,6 +69,7 @@ const initialState: PersistedState = {
   supplements: [],
   supplementLogs: [],
   seeded: false,
+  guestMode: false,
 };
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
@@ -114,6 +126,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
   }, []);
 
+  // Replace the synced portion of state (used when loading cloud data on sign-in).
+  const hydrate = useCallback((next: SyncableState) => {
+    setState((s) => ({ ...s, ...next, seeded: true }));
+  }, []);
+
+  const setGuestMode = useCallback((guestMode: boolean) => {
+    setState((s) => ({ ...s, guestMode }));
+  }, []);
+
   const addWorkout = useCallback((w: Omit<WorkoutEntry, 'id'>) => {
     const entry: WorkoutEntry = { ...w, id: uid('w_') };
     setState((s) => ({ ...s, workouts: [entry, ...s.workouts] }));
@@ -164,10 +185,24 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     return todaysFoods().reduce((acc, f) => addNutrients(acc, f.nutrients, f.servings), emptyNutrients());
   }, [todaysFoods]);
 
+  const snapshot = useMemo<SyncableState>(
+    () => ({
+      profile: state.profile,
+      workouts: state.workouts,
+      foods: state.foods,
+      supplements: state.supplements,
+      supplementLogs: state.supplementLogs,
+    }),
+    [state.profile, state.workouts, state.foods, state.supplements, state.supplementLogs],
+  );
+
   const value = useMemo<AppStoreValue>(
     () => ({
       ...state,
       ready,
+      snapshot,
+      hydrate,
+      setGuestMode,
       setProfile,
       updateProfile,
       resetAll,
@@ -185,6 +220,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [
       state,
       ready,
+      snapshot,
+      hydrate,
+      setGuestMode,
       setProfile,
       updateProfile,
       resetAll,

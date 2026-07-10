@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
-import { Card, Screen, SectionHeader, Text } from '@/components';
+import { Button, Card, Screen, SectionHeader, Text } from '@/components';
 import { config } from '@/lib/config';
 import { useAppStore } from '@/store/AppStore';
+import { useAuth } from '@/store/AuthContext';
 import { useTheme } from '@/theme';
 import { goalLabel } from '@/utils/nutrition';
 import { formatHeight, formatWeight } from '@/utils/units';
@@ -13,6 +14,12 @@ export default function Profile() {
   const theme = useTheme();
   const router = useRouter();
   const { profile, resetAll, supplements } = useAppStore();
+  const { configured, session, email, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace('/');
+  };
 
   if (!profile) {
     return (
@@ -108,6 +115,40 @@ export default function Profile() {
           </>
         ) : null}
       </Card>
+
+      {configured ? (
+        <>
+          <SectionHeader title="Account" />
+          <Card>
+            {session ? (
+              <>
+                <View style={styles.aboutRow}>
+                  <Text color="textMuted">Signed in as</Text>
+                  <Text variant="label">{email}</Text>
+                </View>
+                <View style={[styles.aboutRow, { marginBottom: 12 }]}>
+                  <Text color="textMuted">Cloud sync</Text>
+                  <Text variant="label" style={{ color: theme.colors.success }}>
+                    On
+                  </Text>
+                </View>
+                <Button label="Sign out" variant="secondary" icon="log-out-outline" onPress={handleSignOut} />
+              </>
+            ) : (
+              <>
+                <Text color="textMuted" style={{ marginBottom: 12 }}>
+                  Sign in to back up your data and sync it across devices.
+                </Text>
+                <Button
+                  label="Sign in / Create account"
+                  icon="cloud-upload-outline"
+                  onPress={() => router.push('/(auth)/sign-in')}
+                />
+              </>
+            )}
+          </Card>
+        </>
+      ) : null}
 
       <SectionHeader title="About" />
       <Card>
