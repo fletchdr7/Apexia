@@ -7,6 +7,12 @@
     "icon": "./assets/icon.png",
     "scheme": "apexia",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/35f8c071-9d17-418e-978a-ed3906e63960"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.arrowbaysolutions.apexia",
