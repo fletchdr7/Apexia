@@ -113,6 +113,23 @@ export const DEMO_SUPPLEMENTS: Supplement[] = [
     timing: 'Any time daily',
     goalFit: 0.95,
   },
+  {
+    id: 's2',
+    name: 'Whey Protein Isolate',
+    form: 'powder',
+    servingSize: '1 scoop (32 g)',
+    ingredients: [
+      { name: 'Protein', amount: 25, unit: 'g' },
+      { name: 'Carbohydrate', amount: 2, unit: 'g' },
+      { name: 'Fat', amount: 1, unit: 'g' },
+    ],
+    nutrients: { calories: 120, proteinG: 25, carbsG: 2, fatG: 1 },
+    purpose: 'Convenient high-quality protein',
+    benefits: ['Supports muscle growth & recovery', 'Helps hit daily protein target'],
+    cautions: ['Contains dairy'],
+    timing: 'Post-workout or any time to top up protein',
+    goalFit: 0.9,
+  },
 ];
 
 export const DEMO_SUPPLEMENT_LOGS: SupplementLog[] = [

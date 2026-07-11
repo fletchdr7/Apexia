@@ -54,6 +54,7 @@ class SupplementResult(BaseModel):
     form: str = "capsule"
     servingSize: Optional[str] = None
     ingredients: list[SupplementIngredient] = []
+    nutrients: Optional[Nutrients] = None
     purpose: Optional[str] = None
     benefits: list[str] = []
     cautions: list[str] = []

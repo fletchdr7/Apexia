@@ -17,7 +17,14 @@ import type {
 } from '@/types';
 import { dateKeyOf, stampForDate, todayKey } from '@/utils/date';
 import { uid } from '@/utils/id';
-import { addNutrients, ageFromBirthYear, computeTargets, emptyNutrients } from '@/utils/nutrition';
+import {
+  addNutrients,
+  ageFromBirthYear,
+  computeTargets,
+  doseServings,
+  emptyNutrients,
+  supplementNutrients,
+} from '@/utils/nutrition';
 import {
   DEMO_FOODS,
   DEMO_SUPPLEMENTS,
@@ -366,9 +373,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [state.workouts],
   );
   const nutritionForDate = useCallback(
-    (dateKey: string) =>
-      foodsForDate(dateKey).reduce((acc, f) => addNutrients(acc, f.nutrients, f.servings), emptyNutrients()),
-    [foodsForDate],
+    (dateKey: string) => {
+      const fromFood = foodsForDate(dateKey).reduce(
+        (acc, f) => addNutrients(acc, f.nutrients, f.servings),
+        emptyNutrients(),
+      );
+      const suppById = new Map(state.supplements.map((s) => [s.id, s]));
+      return state.supplementLogs
+        .filter((l) => dateKeyOf(l.takenAt) === dateKey)
+        .reduce((acc, l) => {
+          const sup = suppById.get(l.supplementId);
+          if (!sup) return acc;
+          return addNutrients(acc, supplementNutrients(sup), doseServings(l.dose));
+        }, fromFood);
+    },
+    [foodsForDate, state.supplements, state.supplementLogs],
   );
   const todaysFoods = useCallback(() => foodsForDate(todayKey()), [foodsForDate]);
   const todaysWorkouts = useCallback(() => workoutsForDate(todayKey()), [workoutsForDate]);

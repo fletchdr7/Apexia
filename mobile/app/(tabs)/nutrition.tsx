@@ -7,6 +7,7 @@ import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { FoodEntry, MealSlot } from '@/types';
 import { dateKeyOf, timeLabel } from '@/utils/date';
+import { doseServings, supplementHasMacros, supplementNutrients } from '@/utils/nutrition';
 
 const SLOTS: Array<{ slot: MealSlot; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { slot: 'breakfast', label: 'Breakfast', icon: 'sunny' },
@@ -164,24 +165,43 @@ export default function Nutrition() {
               );
             })}
           </View>
-          {daySupps.map((l) => (
-            <Card key={l.id} style={{ marginTop: 8 }}>
-              <View style={styles.row}>
-                <View style={[styles.icon, { backgroundColor: theme.colors.brandSoft }]}>
-                  <Ionicons name="flask" size={18} color={theme.colors.brand} />
+          {daySupps.map((l) => {
+            const sup = supplements.find((s) => s.id === l.supplementId);
+            let macroLine: string | null = null;
+            if (sup && supplementHasMacros(sup)) {
+              const n = supplementNutrients(sup);
+              const mult = doseServings(l.dose);
+              const bits: string[] = [];
+              if (n.proteinG > 0) bits.push(`${Math.round(n.proteinG * mult)}g protein`);
+              if (n.carbsG > 0) bits.push(`${Math.round(n.carbsG * mult)}g carbs`);
+              if (n.fatG > 0) bits.push(`${Math.round(n.fatG * mult)}g fat`);
+              if (n.calories > 0) bits.push(`${Math.round(n.calories * mult)} kcal`);
+              macroLine = bits.join(' · ');
+            }
+            return (
+              <Card key={l.id} style={{ marginTop: 8 }}>
+                <View style={styles.row}>
+                  <View style={[styles.icon, { backgroundColor: theme.colors.brandSoft }]}>
+                    <Ionicons name="flask" size={18} color={theme.colors.brand} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="label">{l.supplementName}</Text>
+                    <Text variant="caption" color="textFaint">
+                      {l.dose} · {timeLabel(l.takenAt)}
+                    </Text>
+                    {macroLine ? (
+                      <Text variant="caption" style={{ color: theme.colors.brand, marginTop: 2 }}>
+                        +{macroLine}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Pressable hitSlop={10} onPress={() => confirmRemoveSupp(l.id, l.supplementName)}>
+                    <Ionicons name="close-circle" size={20} color={theme.colors.textFaint} />
+                  </Pressable>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text variant="label">{l.supplementName}</Text>
-                  <Text variant="caption" color="textFaint">
-                    {l.dose} · {timeLabel(l.takenAt)}
-                  </Text>
-                </View>
-                <Pressable hitSlop={10} onPress={() => confirmRemoveSupp(l.id, l.supplementName)}>
-                  <Ionicons name="close-circle" size={20} color={theme.colors.textFaint} />
-                </Pressable>
-              </View>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </>
       )}
     </Screen>

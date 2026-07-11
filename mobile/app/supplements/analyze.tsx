@@ -11,6 +11,7 @@ import { analyzeSupplementForGoal, analyzeSupplementPhoto, lookupSupplement } fr
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { Supplement } from '@/types';
+import { supplementHasMacros, supplementNutrients } from '@/utils/nutrition';
 
 type Phase = 'capture' | 'analyzing' | 'result';
 
@@ -175,6 +176,28 @@ export default function AnalyzeSupplement() {
               ) : null}
             </Card>
 
+            {supplementHasMacros(result) ? (
+              <Card style={{ marginTop: 12 }}>
+                <Text variant="label" style={{ marginBottom: 8 }}>
+                  Counts toward your day (per serving)
+                </Text>
+                {(() => {
+                  const n = supplementNutrients(result);
+                  return (
+                    <View style={styles.macroRow}>
+                      <Macro label="Cal" value={Math.round(n.calories)} />
+                      <Macro label="Protein" value={`${Math.round(n.proteinG)}g`} />
+                      <Macro label="Carbs" value={`${Math.round(n.carbsG)}g`} />
+                      <Macro label="Fat" value={`${Math.round(n.fatG)}g`} />
+                    </View>
+                  );
+                })()}
+                <Text variant="caption" color="textFaint" style={{ marginTop: 8 }}>
+                  Logging a dose adds these to your nutrition totals.
+                </Text>
+              </Card>
+            ) : null}
+
             {result.ingredients.length > 0 ? (
               <Card style={{ marginTop: 12 }}>
                 <Text variant="label" style={{ marginBottom: 8 }}>
@@ -239,6 +262,17 @@ function Header({ title, onClose, light }: { title: string; onClose: () => void;
   );
 }
 
+function Macro({ label, value }: { label: string; value: string | number }) {
+  return (
+    <View style={styles.macroItem}>
+      <Text variant="subtitle">{value}</Text>
+      <Text variant="caption" color="textMuted">
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 function InfoCard({
   title,
   icon,
@@ -281,6 +315,8 @@ const styles = StyleSheet.create({
   shutterInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: 'white' },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   fit: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  macroRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  macroItem: { flex: 1, alignItems: 'center' },
   ingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   footer: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth },
 });

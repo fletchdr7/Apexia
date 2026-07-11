@@ -270,7 +270,11 @@ SUPPLEMENT_PROMPT = (
     "Respond ONLY with JSON: "
     '{"name": str, "brand": str, "form": one_of[capsule|tablet|powder|liquid|gummy|softgel], '
     '"servingSize": str, "ingredients": [{"name": str, "amount": num, "unit": str, "dailyValuePct": num}], '
+    '"nutrients": {"calories": num, "proteinG": num, "carbsG": num, "fatG": num, "sugarG": num, "sodiumMg": num}, '
     '"purpose": str, "benefits": [str], "cautions": [str], "timing": str, "goalFit": num_0_to_1}. '
+    "Set 'nutrients' to the macros PER SERVING from the Nutrition/Supplement Facts panel (e.g. protein powder, "
+    "mass gainer, BCAAs). If the product provides no meaningful calories/macros (vitamins, creatine, minerals), "
+    "omit 'nutrients' or set its values to 0. "
     "Be accurate and evidence-based; keep benefits/cautions short. "
     "If you cannot clearly identify the supplement from the image, set name to 'Unknown supplement', "
     "leave ingredients/benefits/cautions empty, and set goalFit to 0."
@@ -280,8 +284,11 @@ SUPPLEMENT_LOOKUP_PROMPT = (
     "Provide an evidence-based analysis of the dietary supplement named below. "
     "Respond ONLY with JSON: "
     '{"name": str, "form": one_of[capsule|tablet|powder|liquid|gummy|softgel], "servingSize": str, '
-    '"ingredients": [{"name": str, "amount": num, "unit": str}], "purpose": str, "benefits": [str], '
-    '"cautions": [str], "timing": str}. Keep it concise and accurate. '
+    '"ingredients": [{"name": str, "amount": num, "unit": str}], '
+    '"nutrients": {"calories": num, "proteinG": num, "carbsG": num, "fatG": num}, '
+    '"purpose": str, "benefits": [str], "cautions": [str], "timing": str}. Keep it concise and accurate. '
+    "Set 'nutrients' to typical macros PER SERVING when the supplement provides meaningful calories/macros "
+    "(e.g. protein powder ~1 scoop, mass gainer); otherwise omit it or use 0. "
     "If the name is not a real/known supplement, set name to 'Unknown supplement' and leave the rest empty.\n"
     "Supplement name: "
 )

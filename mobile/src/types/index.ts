@@ -139,6 +139,8 @@ export interface Supplement {
   form: SupplementForm;
   servingSize?: string;
   ingredients: SupplementIngredient[];
+  /** Macros contributed per serving (e.g. protein powder). Optional — many supplements have none. */
+  nutrients?: Nutrients;
   // AI analysis
   purpose?: string;
   benefits?: string[];

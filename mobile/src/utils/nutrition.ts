@@ -4,6 +4,7 @@ import type {
   NutritionTargets,
   Nutrients,
   Sex,
+  Supplement,
   UserProfile,
 } from '@/types';
 
@@ -98,6 +99,72 @@ export function addNutrients(a: Nutrients, b: Nutrients, servings = 1): Nutrient
     sugarG: (a.sugarG ?? 0) + (b.sugarG ?? 0) * servings,
     sodiumMg: (a.sodiumMg ?? 0) + (b.sodiumMg ?? 0) * servings,
   };
+}
+
+const toGrams = (amount: number, unit: string): number => {
+  const u = (unit || '').toLowerCase();
+  if (u === 'mg') return amount / 1000;
+  if (u === 'mcg' || u === 'ug' || u === 'µg') return amount / 1_000_000;
+  return amount; // treat g (and unknowns) as grams
+};
+
+/**
+ * Macros a supplement contributes per serving. Uses explicit `nutrients` when
+ * present, otherwise derives protein/carbs/fat from the ingredient list (e.g. a
+ * protein powder that lists "Protein 24 g"). Returns zeros when there's nothing
+ * macro-relevant (vitamins, creatine, etc.).
+ */
+export function supplementNutrients(sup: Pick<Supplement, 'nutrients' | 'ingredients'>): Nutrients {
+  if (sup.nutrients) {
+    return {
+      calories: sup.nutrients.calories || 0,
+      proteinG: sup.nutrients.proteinG || 0,
+      carbsG: sup.nutrients.carbsG || 0,
+      fatG: sup.nutrients.fatG || 0,
+      fiberG: sup.nutrients.fiberG || 0,
+      sugarG: sup.nutrients.sugarG || 0,
+      sodiumMg: sup.nutrients.sodiumMg || 0,
+    };
+  }
+  const out = emptyNutrients();
+  for (const ing of sup.ingredients ?? []) {
+    const name = (ing.name || '').toLowerCase();
+    const unit = (ing.unit || '').toLowerCase();
+    const grams = toGrams(ing.amount || 0, unit);
+    if ((unit === 'kcal' || unit === 'cal') && (name.includes('calorie') || name.includes('energy'))) {
+      out.calories += ing.amount || 0;
+    } else if (name.includes('protein')) {
+      out.proteinG += grams;
+    } else if (name.includes('sugar')) {
+      out.sugarG = (out.sugarG ?? 0) + grams;
+    } else if (name.includes('fiber') || name.includes('fibre')) {
+      out.fiberG = (out.fiberG ?? 0) + grams;
+    } else if (name.includes('carb')) {
+      out.carbsG += grams;
+    } else if (name.includes('sodium')) {
+      out.sodiumMg = (out.sodiumMg ?? 0) + (ing.amount || 0);
+    } else if (name.includes('fat') && !name.includes('burner')) {
+      out.fatG += grams;
+    }
+  }
+  if (out.calories === 0) {
+    out.calories = Math.round(out.proteinG * 4 + out.carbsG * 4 + out.fatG * 9);
+  }
+  return out;
+}
+
+/** Whether a supplement contributes any macros/calories worth logging. */
+export function supplementHasMacros(sup: Pick<Supplement, 'nutrients' | 'ingredients'>): boolean {
+  const n = supplementNutrients(sup);
+  return n.calories > 0 || n.proteinG > 0 || n.carbsG > 0 || n.fatG > 0;
+}
+
+/** Parse a leading serving count from a dose string ("2 scoops" -> 2). Defaults to 1. */
+export function doseServings(dose?: string): number {
+  if (!dose) return 1;
+  const m = dose.match(/^\s*(\d+(?:\.\d+)?)/);
+  const n = m ? Number(m[1]) : 1;
+  return n > 0 ? n : 1;
 }
 
 /** Rough MET-based calorie burn estimate when the user didn't provide one. */
