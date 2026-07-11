@@ -8,5 +8,6 @@ export { MacroBar } from './MacroBar';
 export { ProgressRing } from './ProgressRing';
 export { Screen } from './Screen';
 export { SectionHeader } from './SectionHeader';
+export { Sparkline } from './Sparkline';
 export { StatTile } from './StatTile';
 export { Text } from './Text';

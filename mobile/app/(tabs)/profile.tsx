@@ -15,7 +15,7 @@ import { formatHeight, formatWeight } from '@/utils/units';
 export default function Profile() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, resetAll, supplements, updateProfile, healthEnabled, setHealthEnabled } = useAppStore();
+  const { profile, resetAll, supplements, updateProfile, healthEnabled, setHealthEnabled, logWeight } = useAppStore();
   const { configured, session, email, signOut } = useAuth();
   const [healthBusy, setHealthBusy] = useState(false);
   const healthSupported = Platform.OS === 'ios' && isHealthAvailable();
@@ -40,7 +40,7 @@ export default function Profile() {
     const kg = await getLatestBodyMassKg();
     setHealthBusy(false);
     if (kg && profile) {
-      updateProfile({ weightKg: kg });
+      logWeight(kg);
       Alert.alert('Apple Health', `Imported your latest weight: ${formatWeight(kg, profile.units)}.`);
     } else {
       Alert.alert('Apple Health', 'No recent weight found in Apple Health.');
@@ -103,6 +103,7 @@ export default function Profile() {
 
       <SectionHeader title="Manage" />
       <Card padded={false}>
+        <LinkRow icon="trending-up" label="Progress" onPress={() => router.push('/progress')} />
         <LinkRow icon="flask" label="Supplements" onPress={() => router.push('/supplements')} />
         <LinkRow icon="barbell" label="Workout history" onPress={() => router.push('/(tabs)/workouts')} />
         <LinkRow icon="restaurant" label="Nutrition log" onPress={() => router.push('/(tabs)/nutrition')} last />

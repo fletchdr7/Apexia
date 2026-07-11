@@ -36,8 +36,16 @@ export interface UserProfile {
   dietaryPreferences: string[];
   units: UnitSystem;
   onboardedAt?: string;
+  /** Optional strength target for one lift (e.g. bench press to 100 kg). */
+  strengthGoal?: { exercise: string; targetKg: number };
   // Derived nutrition targets
   targets: NutritionTargets;
+}
+
+export interface WeightEntry {
+  id: string;
+  loggedAt: string; // ISO
+  weightKg: number;
 }
 
 export interface NutritionTargets {

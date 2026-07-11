@@ -8,13 +8,14 @@ import type {
   Supplement,
   SupplementLog,
   UserProfile,
+  WeightEntry,
   WorkoutEntry,
   WorkoutLocation,
   WorkoutPlan,
 } from '@/types';
 import { dateKeyOf, stampForDate, todayKey } from '@/utils/date';
 import { uid } from '@/utils/id';
-import { addNutrients, emptyNutrients } from '@/utils/nutrition';
+import { addNutrients, ageFromBirthYear, computeTargets, emptyNutrients } from '@/utils/nutrition';
 import {
   DEMO_FOODS,
   DEMO_SUPPLEMENTS,
@@ -37,6 +38,8 @@ interface PersistedState {
   homeEquipmentIds: string[];
   /** Per-exercise performance memory (keyed by lowercase name) for progression. */
   exerciseHistory: Record<string, ExerciseRecord>;
+  /** Body-weight history for progress tracking. */
+  weightLogs: WeightEntry[];
   seeded: boolean;
   /** User chose to use the app without an account (local-only, no sync). */
   guestMode: boolean;
@@ -56,6 +59,7 @@ export type SyncableState = Pick<
   | 'gymEquipmentIds'
   | 'homeEquipmentIds'
   | 'exerciseHistory'
+  | 'weightLogs'
 >;
 
 interface AppStoreValue extends PersistedState {
@@ -86,6 +90,9 @@ interface AppStoreValue extends PersistedState {
   addSupplement: (s: Omit<Supplement, 'id'>) => Supplement;
   removeSupplement: (id: string) => void;
   logSupplement: (supplement: Supplement, dose?: string) => void;
+  // weight
+  logWeight: (weightKg: number, dateKey?: string) => void;
+  removeWeightLog: (id: string) => void;
   // equipment
   addEquipment: (e: Omit<Equipment, 'id'>, location?: WorkoutLocation) => Equipment;
   removeEquipment: (id: string) => void;
@@ -109,6 +116,7 @@ const initialState: PersistedState = {
   gymEquipmentIds: [],
   homeEquipmentIds: [],
   exerciseHistory: {},
+  weightLogs: [],
   seeded: false,
   guestMode: false,
   healthEnabled: false,
@@ -124,6 +132,7 @@ function normalize(raw: Partial<PersistedState> & { selectedEquipmentIds?: strin
   merged.homeEquipmentIds = merged.homeEquipmentIds ?? [];
   merged.customEquipment = merged.customEquipment ?? [];
   merged.exerciseHistory = merged.exerciseHistory ?? {};
+  merged.weightLogs = merged.weightLogs ?? [];
   return merged;
 }
 
@@ -158,12 +167,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const setProfile = useCallback((profile: UserProfile) => {
     setState((s) => {
+      const weightLogs = s.weightLogs.length
+        ? s.weightLogs
+        : [{ id: uid('wt_'), loggedAt: new Date().toISOString(), weightKg: profile.weightKg }];
       // Seed sample activity the first time a profile is created so the app
       // never looks empty during first exploration.
       if (!s.seeded) {
         return {
           ...s,
           profile,
+          weightLogs,
           workouts: DEMO_WORKOUTS,
           foods: DEMO_FOODS,
           supplements: DEMO_SUPPLEMENTS,
@@ -171,7 +184,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           seeded: true,
         };
       }
-      return { ...s, profile };
+      return { ...s, profile, weightLogs };
     });
   }, []);
 
@@ -263,6 +276,36 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, supplementLogs: [log, ...s.supplementLogs] }));
   }, []);
 
+  const logWeight = useCallback((weightKg: number, dateKey?: string) => {
+    setState((s) => {
+      const key = dateKey ?? todayKey();
+      const loggedAt = stampForDate(key);
+      // One entry per day: replace any existing entry on that day.
+      const others = s.weightLogs.filter((w) => dateKeyOf(w.loggedAt) !== key);
+      const entry: WeightEntry = { id: uid('wt_'), loggedAt, weightKg };
+      const weightLogs = [entry, ...others].sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
+      // Keep current weight + nutrition targets in sync with the latest entry.
+      let profile = s.profile;
+      if (profile) {
+        const latest = weightLogs[0]?.weightKg ?? weightKg;
+        const targets = computeTargets({
+          sex: profile.sex,
+          weightKg: latest,
+          heightCm: profile.heightCm,
+          age: ageFromBirthYear(profile.birthYear),
+          activityLevel: profile.activityLevel,
+          goal: profile.goal,
+        });
+        profile = { ...profile, weightKg: latest, targets };
+      }
+      return { ...s, weightLogs, profile };
+    });
+  }, []);
+
+  const removeWeightLog = useCallback((id: string) => {
+    setState((s) => ({ ...s, weightLogs: s.weightLogs.filter((w) => w.id !== id) }));
+  }, []);
+
   const addEquipment = useCallback((e: Omit<Equipment, 'id'>, location: WorkoutLocation = 'gym') => {
     const entry: Equipment = { ...e, id: uid('eq_') };
     setState((s) => ({
@@ -320,6 +363,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       gymEquipmentIds: state.gymEquipmentIds,
       homeEquipmentIds: state.homeEquipmentIds,
       exerciseHistory: state.exerciseHistory,
+      weightLogs: state.weightLogs,
     }),
     [
       state.profile,
@@ -331,6 +375,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       state.gymEquipmentIds,
       state.homeEquipmentIds,
       state.exerciseHistory,
+      state.weightLogs,
     ],
   );
 
@@ -357,6 +402,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addSupplement,
       removeSupplement,
       logSupplement,
+      logWeight,
+      removeWeightLog,
       addEquipment,
       removeEquipment,
       toggleEquipment,
@@ -387,6 +434,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addSupplement,
       removeSupplement,
       logSupplement,
+      logWeight,
+      removeWeightLog,
       addEquipment,
       removeEquipment,
       toggleEquipment,
