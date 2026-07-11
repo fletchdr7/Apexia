@@ -95,6 +95,7 @@ interface AppStoreValue extends PersistedState {
   addSupplement: (s: Omit<Supplement, 'id'>) => Supplement;
   removeSupplement: (id: string) => void;
   logSupplement: (supplement: Supplement, dose?: string) => void;
+  removeSupplementLog: (id: string) => void;
   // weight
   logWeight: (weightKg: number, dateKey?: string) => void;
   removeWeightLog: (id: string) => void;
@@ -274,15 +275,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, supplements: s.supplements.filter((x) => x.id !== id) }));
   }, []);
 
-  const logSupplement = useCallback((supplement: Supplement, dose?: string) => {
-    const log: SupplementLog = {
-      id: uid('sl_'),
-      supplementId: supplement.id,
-      supplementName: supplement.name,
-      takenAt: new Date().toISOString(),
-      dose: dose ?? supplement.servingSize ?? '1 serving',
-    };
-    setState((s) => ({ ...s, supplementLogs: [log, ...s.supplementLogs] }));
+  const logSupplement = useCallback(
+    (supplement: Supplement, dose?: string) => {
+      const log: SupplementLog = {
+        id: uid('sl_'),
+        supplementId: supplement.id,
+        supplementName: supplement.name,
+        takenAt: stampForDate(selectedDate),
+        dose: dose ?? supplement.servingSize ?? '1 serving',
+      };
+      setState((s) => ({ ...s, supplementLogs: [log, ...s.supplementLogs] }));
+    },
+    [selectedDate],
+  );
+
+  const removeSupplementLog = useCallback((id: string) => {
+    setState((s) => ({ ...s, supplementLogs: s.supplementLogs.filter((l) => l.id !== id) }));
   }, []);
 
   const logWeight = useCallback((weightKg: number, dateKey?: string) => {
@@ -418,6 +426,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addSupplement,
       removeSupplement,
       logSupplement,
+      removeSupplementLog,
       logWeight,
       removeWeightLog,
       addBodyScan,
@@ -451,6 +460,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addSupplement,
       removeSupplement,
       logSupplement,
+      removeSupplementLog,
       logWeight,
       removeWeightLog,
       addBodyScan,

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button, Card, DateBar, EmptyState, Screen, SectionHeader, StatTile, Text } from '@/components';
 import { ACTIVITIES } from '@/constants/activities';
@@ -130,8 +130,16 @@ export default function Workouts() {
                     {w.caloriesBurned ? ` · ${w.caloriesBurned} kcal` : ''}
                   </Text>
                 </View>
-                <Pressable hitSlop={10} onPress={() => removeWorkout(w.id)}>
-                  <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textFaint} />
+                <Pressable
+                  hitSlop={10}
+                  onPress={() =>
+                    Alert.alert('Delete workout', `Delete ${w.title}?`, [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => removeWorkout(w.id) },
+                    ])
+                  }
+                >
+                  <Ionicons name="trash-outline" size={18} color={theme.colors.textFaint} />
                 </Pressable>
               </View>
               {w.exercises && w.exercises.length > 0 ? (
