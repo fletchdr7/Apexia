@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, Chip, ExerciseDemo, ExercisePicker, Text } from '@/components';
@@ -109,6 +109,12 @@ export default function BuildWorkout() {
     });
   };
   const remove = (i: number) => setExercises((prev) => prev.filter((_, idx) => idx !== i));
+  const confirmRemove = (i: number) => {
+    Alert.alert('Remove exercise', `Remove ${exercises[i]?.name ?? 'this exercise'} from your workout?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => remove(i) },
+    ]);
+  };
 
   const openSwap = async (i: number) => {
     if (swapFor === i) {
@@ -260,7 +266,8 @@ export default function BuildWorkout() {
                     <IconBtn icon="arrow-up" onPress={() => move(i, -1)} disabled={i === 0} />
                     <IconBtn icon="arrow-down" onPress={() => move(i, 1)} disabled={i === exercises.length - 1} />
                     <IconBtn icon="swap-horizontal" onPress={() => openSwap(i)} active={swapFor === i} />
-                    <IconBtn icon="trash-outline" onPress={() => remove(i)} />
+                    <View style={[styles.iconDivider, { backgroundColor: theme.colors.border }]} />
+                    <IconBtn icon="trash-outline" onPress={() => confirmRemove(i)} color={theme.colors.danger} />
                   </View>
                 </View>
 
@@ -334,16 +341,18 @@ function IconBtn({
   onPress,
   disabled,
   active,
+  color,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
   disabled?: boolean;
   active?: boolean;
+  color?: string;
 }) {
   const theme = useTheme();
   return (
-    <Pressable onPress={onPress} disabled={disabled} hitSlop={6} style={{ padding: 6, opacity: disabled ? 0.3 : 1 }}>
-      <Ionicons name={icon} size={18} color={active ? theme.colors.brand : theme.colors.textMuted} />
+    <Pressable onPress={onPress} disabled={disabled} hitSlop={8} style={{ padding: 7, opacity: disabled ? 0.3 : 1 }}>
+      <Ionicons name={icon} size={18} color={color ?? (active ? theme.colors.brand : theme.colors.textMuted)} />
     </Pressable>
   );
 }
@@ -403,6 +412,7 @@ const styles = StyleSheet.create({
   rowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center' },
   iconRow: { flexDirection: 'row', alignItems: 'center' },
+  iconDivider: { width: StyleSheet.hairlineWidth, height: 22, marginHorizontal: 6 },
   editRow: { flexDirection: 'row', gap: 14, marginTop: 12, alignItems: 'flex-end' },
   stepper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 4, height: 40 },
   stepBtn: { padding: 8 },
