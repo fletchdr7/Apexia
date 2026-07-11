@@ -23,7 +23,9 @@ from .schemas import (
     BodyScanResult,
     EquipmentInput,
     EquipmentResult,
+    FoodEstimate,
     FoodScanResult,
+    Nutrients,
     PlannedExercise,
     Profile,
     SupplementResult,
@@ -212,6 +214,51 @@ def _food_fallback(mode: str) -> FoodScanResult:
         confidence=0.5,
         notes="Heuristic estimate — set OPENAI_API_KEY for real plate analysis.",
     )
+
+
+def estimate_food(name: str) -> FoodEstimate:
+    client = _client()
+    clean = (name or "").strip()
+    fallback = FoodEstimate(
+        name=clean or "Food",
+        servingLabel="1 serving",
+        nutrients=Nutrients(calories=200, proteinG=8, carbsG=25, fatG=8),
+        confidence=0.3,
+    )
+    if client is None or not clean:
+        return fallback
+    settings = get_settings()
+    prompt = (
+        "Estimate the nutrition for one typical serving of the food below. Respond ONLY with JSON: "
+        '{"servingLabel": str, "calories": num, "proteinG": num, "carbsG": num, "fatG": num, '
+        '"fiberG": num, "sugarG": num, "sodiumMg": num}. Be realistic for a normal portion.\nFood: '
+        + clean
+    )
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=250,
+            temperature=0.2,
+        )
+        d = _extract_json(resp.choices[0].message.content or "")
+        return FoodEstimate(
+            name=clean,
+            servingLabel=str(d.get("servingLabel") or "1 serving"),
+            nutrients=Nutrients(
+                calories=d.get("calories", 0),
+                proteinG=d.get("proteinG", 0),
+                carbsG=d.get("carbsG", 0),
+                fatG=d.get("fatG", 0),
+                fiberG=d.get("fiberG"),
+                sugarG=d.get("sugarG"),
+                sodiumMg=d.get("sodiumMg"),
+            ),
+            confidence=0.6,
+        )
+    except Exception:
+        logger.exception("Food estimate failed")
+        return fallback
 
 
 # ---------------------------------------------------------------------------

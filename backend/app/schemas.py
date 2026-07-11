@@ -30,6 +30,17 @@ class FoodScanResult(BaseModel):
     notes: Optional[str] = None
 
 
+class FoodEstimate(BaseModel):
+    name: str
+    servingLabel: str = "1 serving"
+    nutrients: Nutrients
+    confidence: float = Field(default=0.5, ge=0, le=1)
+
+
+class FoodLookupRequest(BaseModel):
+    name: str
+
+
 class SupplementIngredient(BaseModel):
     name: str
     amount: float
