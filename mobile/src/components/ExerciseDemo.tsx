@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { findExerciseMedia, type ExerciseMedia } from '@/lib/exerciseMedia';
 import { useTheme } from '@/theme';
+import { Button } from './Button';
 import { Text } from './Text';
 
 interface ExerciseDemoProps {
@@ -82,6 +83,18 @@ function DemoModal({ media, onClose }: { media: ExerciseMedia; onClose: () => vo
             <Text style={styles.loopText}>{frame === 0 ? 'Start' : 'Finish'} · looping</Text>
           </View>
         </View>
+
+        <Button
+          label="Watch video demos"
+          icon="logo-youtube"
+          variant="secondary"
+          onPress={() =>
+            Linking.openURL(
+              `https://www.youtube.com/results?search_query=${encodeURIComponent(`${media.name} exercise proper form`)}`,
+            )
+          }
+          style={{ marginTop: 12 }}
+        />
 
         <View style={styles.chips}>
           {media.primaryMuscles.map((m) => (
