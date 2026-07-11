@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -28,6 +29,7 @@ const SUGGESTIONS = [
 
 export default function Coach() {
   const theme = useTheme();
+  const router = useRouter();
   const { profile } = useAppStore();
   const scrollRef = useRef<ScrollView>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -81,6 +83,16 @@ export default function Coach() {
             {config.hasAiBackend ? 'AI-powered' : 'Demo mode · connect AI backend for full power'}
           </Text>
         </View>
+        <Pressable
+          onPress={() => router.push('/body-scan')}
+          style={[styles.scanBtn, { backgroundColor: theme.colors.brandSoft }]}
+          hitSlop={8}
+        >
+          <Ionicons name="body" size={16} color={theme.colors.brand} />
+          <Text variant="caption" style={{ color: theme.colors.brand, marginLeft: 6 }}>
+            Body scan
+          </Text>
+        </Pressable>
       </View>
 
       <KeyboardAvoidingView
@@ -163,6 +175,7 @@ function Bubble({ message }: { message: ChatMessage }) {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth },
   avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  scanBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   bubble: { maxWidth: '86%', padding: 14, borderRadius: 18, marginBottom: 10 },
   suggestions: { marginTop: 12, gap: 8 },
   suggestion: { padding: 14, borderRadius: 14, borderWidth: 1 },

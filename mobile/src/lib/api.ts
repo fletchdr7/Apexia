@@ -1,4 +1,5 @@
 import type {
+  BodyScanResult,
   ChatMessage,
   CoachPlan,
   EquipmentScanResult,
@@ -264,6 +265,54 @@ export function analyzeSupplementForGoal(
     ? `Strong fit for your goal to ${goalLabel(goal).toLowerCase()}.`
     : `Reasonable general-health choice, but not a top priority for ${goalLabel(goal).toLowerCase()}.`;
   return { goalFit, verdict };
+}
+
+// ---------------------------------------------------------------------------
+// Body scan (physique assessment)
+// ---------------------------------------------------------------------------
+
+export interface BodyScanContext {
+  weight?: { startKg?: number; currentKg?: number; targetKg?: number; changeKg?: number };
+  topLifts?: { name: string; bestKg?: number; sessions: number }[];
+  workoutsLast30?: number;
+  nutritionAvg?: { calories: number; proteinG: number } | null;
+  equipment?: string[];
+}
+
+export async function analyzeBodyScan(params: {
+  images: string[];
+  profile: UserProfile | null;
+  context: BodyScanContext;
+}): Promise<BodyScanResult> {
+  if (config.hasAiBackend) {
+    return post<BodyScanResult>('/coach/body-scan', {
+      images: params.images,
+      profile: params.profile,
+      context: params.context,
+    });
+  }
+  return localBodyScan(params.profile);
+}
+
+function localBodyScan(profile: UserProfile | null): BodyScanResult {
+  const goal = profile?.goal ?? 'maintain';
+  return {
+    summary: `A personalized plan focused on ${goalLabel(goal).toLowerCase()}, built from your logged data.`,
+    estimatedComposition: 'Connect the AI backend for a photo-based visual assessment.',
+    focusAreas: [
+      { area: 'Consistency', observation: 'Habits drive change.', action: 'Hit your weekly workout and protein targets most days.' },
+      { area: 'Progressive overload', observation: 'Strength builds physique.', action: 'Add reps or a little weight on key lifts each week.' },
+    ],
+    training: ['Train each muscle group ~2x/week', 'Prioritize compound lifts, add isolation for lagging areas'],
+    nutrition: [
+      profile?.targets ? `Hit ~${profile.targets.proteinG}g protein daily` : 'Keep protein high and consistent',
+      'Favor whole foods; keep calories aligned with your goal',
+    ],
+    milestones: ['4 workouts/week for a month', 'Add a little weight to a main lift', 'Stay in calorie range 5 days/week'],
+    encouragement: "You've got the data and the tools — small steps compound fast.",
+    disclaimer: 'General guidance only, not medical advice.',
+    confidence: 0.5,
+  };
 }
 
 // ---------------------------------------------------------------------------

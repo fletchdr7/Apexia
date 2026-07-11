@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type {
+  BodyAssessment,
+  BodyScanResult,
   Equipment,
   ExerciseRecord,
   FoodEntry,
@@ -40,6 +42,8 @@ interface PersistedState {
   exerciseHistory: Record<string, ExerciseRecord>;
   /** Body-weight history for progress tracking. */
   weightLogs: WeightEntry[];
+  /** Saved AI physique assessments (photos are not stored, only the report). */
+  bodyScans: BodyAssessment[];
   seeded: boolean;
   /** User chose to use the app without an account (local-only, no sync). */
   guestMode: boolean;
@@ -60,6 +64,7 @@ export type SyncableState = Pick<
   | 'homeEquipmentIds'
   | 'exerciseHistory'
   | 'weightLogs'
+  | 'bodyScans'
 >;
 
 interface AppStoreValue extends PersistedState {
@@ -93,6 +98,8 @@ interface AppStoreValue extends PersistedState {
   // weight
   logWeight: (weightKg: number, dateKey?: string) => void;
   removeWeightLog: (id: string) => void;
+  // body scans
+  addBodyScan: (result: BodyScanResult) => void;
   // equipment
   addEquipment: (e: Omit<Equipment, 'id'>, location?: WorkoutLocation) => Equipment;
   removeEquipment: (id: string) => void;
@@ -117,6 +124,7 @@ const initialState: PersistedState = {
   homeEquipmentIds: [],
   exerciseHistory: {},
   weightLogs: [],
+  bodyScans: [],
   seeded: false,
   guestMode: false,
   healthEnabled: false,
@@ -133,6 +141,7 @@ function normalize(raw: Partial<PersistedState> & { selectedEquipmentIds?: strin
   merged.customEquipment = merged.customEquipment ?? [];
   merged.exerciseHistory = merged.exerciseHistory ?? {};
   merged.weightLogs = merged.weightLogs ?? [];
+  merged.bodyScans = merged.bodyScans ?? [];
   return merged;
 }
 
@@ -306,6 +315,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, weightLogs: s.weightLogs.filter((w) => w.id !== id) }));
   }, []);
 
+  const addBodyScan = useCallback((result: BodyScanResult) => {
+    const entry: BodyAssessment = { id: uid('bs_'), createdAt: new Date().toISOString(), result };
+    setState((s) => ({ ...s, bodyScans: [entry, ...s.bodyScans] }));
+  }, []);
+
   const addEquipment = useCallback((e: Omit<Equipment, 'id'>, location: WorkoutLocation = 'gym') => {
     const entry: Equipment = { ...e, id: uid('eq_') };
     setState((s) => ({
@@ -364,6 +378,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       homeEquipmentIds: state.homeEquipmentIds,
       exerciseHistory: state.exerciseHistory,
       weightLogs: state.weightLogs,
+      bodyScans: state.bodyScans,
     }),
     [
       state.profile,
@@ -376,6 +391,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       state.homeEquipmentIds,
       state.exerciseHistory,
       state.weightLogs,
+      state.bodyScans,
     ],
   );
 
@@ -404,6 +420,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       logSupplement,
       logWeight,
       removeWeightLog,
+      addBodyScan,
       addEquipment,
       removeEquipment,
       toggleEquipment,
@@ -436,6 +453,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       logSupplement,
       logWeight,
       removeWeightLog,
+      addBodyScan,
       addEquipment,
       removeEquipment,
       toggleEquipment,

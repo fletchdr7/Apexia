@@ -215,6 +215,30 @@ export interface EquipmentScanResult {
   notes?: string;
 }
 
+export interface BodyFocusArea {
+  area: string;
+  observation: string;
+  action: string;
+}
+
+export interface BodyScanResult {
+  summary: string;
+  estimatedComposition?: string;
+  focusAreas: BodyFocusArea[];
+  training: string[];
+  nutrition: string[];
+  milestones: string[];
+  encouragement: string;
+  disclaimer: string;
+  confidence: number;
+}
+
+export interface BodyAssessment {
+  id: string;
+  createdAt: string;
+  result: BodyScanResult;
+}
+
 export type ChatRole = 'user' | 'assistant' | 'system';
 
 export interface ChatMessage {
