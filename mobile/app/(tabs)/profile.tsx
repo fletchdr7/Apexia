@@ -8,7 +8,7 @@ import { Image } from 'expo-image';
 import { Button, Card, Chip, Screen, SectionHeader, Text } from '@/components';
 import { COACH_AVATARS } from '@/constants/avatars';
 import { config } from '@/lib/config';
-import { getLatestBodyMassKg, isHealthAvailable, requestHealthPermissions } from '@/lib/health';
+import { getLatestBodyComposition, isHealthAvailable, requestHealthPermissions } from '@/lib/health';
 import { useAppStore } from '@/store/AppStore';
 import { useAuth } from '@/store/AuthContext';
 import { useTheme } from '@/theme';
@@ -38,16 +38,33 @@ export default function Profile() {
     }
   };
 
-  const importWeight = async () => {
+  const importFromHealth = async () => {
     setHealthBusy(true);
-    const kg = await getLatestBodyMassKg();
+    const comp = await getLatestBodyComposition();
     setHealthBusy(false);
-    if (kg && profile) {
-      logWeight(kg);
-      Alert.alert('Apple Health', `Imported your latest weight: ${formatWeight(kg, profile.units)}.`);
-    } else {
-      Alert.alert('Apple Health', 'No recent weight found in Apple Health.');
+    if (!profile) return;
+    if (comp.weightKg) logWeight(comp.weightKg);
+    if (comp.bodyFatPct != null || comp.leanMassKg != null || comp.bmi != null) {
+      updateProfile({
+        bodyComposition: {
+          bodyFatPct: comp.bodyFatPct,
+          leanMassKg: comp.leanMassKg,
+          bmi: comp.bmi,
+          updatedAt: new Date().toISOString(),
+        },
+      });
     }
+    const parts: string[] = [];
+    if (comp.weightKg) parts.push(formatWeight(comp.weightKg, profile.units));
+    if (comp.bodyFatPct != null) parts.push(`${comp.bodyFatPct}% fat`);
+    if (comp.leanMassKg != null) parts.push(`${formatWeight(comp.leanMassKg, profile.units)} lean`);
+    if (comp.bmi != null) parts.push(`BMI ${comp.bmi}`);
+    Alert.alert(
+      'Apple Health',
+      parts.length
+        ? `Imported: ${parts.join(' · ')}.`
+        : 'No recent body data found. Make sure your smart scale (e.g. VeSync) is set to sync with Apple Health.',
+    );
   };
 
   if (!profile) {
@@ -223,7 +240,7 @@ export default function Profile() {
                     Connected
                   </Text>
                 </View>
-                <Button label="Import weight from Health" icon="download-outline" variant="secondary" onPress={importWeight} loading={healthBusy} />
+                <Button label="Import from Apple Health" icon="download-outline" variant="secondary" onPress={importFromHealth} loading={healthBusy} />
                 <Pressable onPress={() => setHealthEnabled(false)} style={{ marginTop: 12, alignItems: 'center' }}>
                   <Text style={{ color: theme.colors.danger }}>Disconnect</Text>
                 </Pressable>

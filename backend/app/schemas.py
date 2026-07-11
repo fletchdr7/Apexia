@@ -98,6 +98,13 @@ class NutritionTargets(BaseModel):
     waterMl: float
 
 
+class BodyComposition(BaseModel):
+    bodyFatPct: Optional[float] = None
+    leanMassKg: Optional[float] = None
+    bmi: Optional[float] = None
+    updatedAt: Optional[str] = None
+
+
 class Profile(BaseModel):
     displayName: Optional[str] = None
     sex: Optional[str] = None
@@ -113,6 +120,7 @@ class Profile(BaseModel):
     lifestyle: list[str] = []
     dietaryPreferences: list[str] = []
     targets: Optional[NutritionTargets] = None
+    bodyComposition: Optional[BodyComposition] = None
 
 
 class BodyScanRequest(BaseModel):

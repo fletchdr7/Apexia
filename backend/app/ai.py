@@ -536,6 +536,19 @@ def _system_prompt(profile: Optional[Profile]) -> str:
         parts.append(f"- Lifestyle: {', '.join(profile.lifestyle)}")
     if profile.dietaryPreferences:
         parts.append(f"- Diet: {', '.join(profile.dietaryPreferences)}")
+    bc = profile.bodyComposition
+    if bc and (bc.bodyFatPct is not None or bc.leanMassKg is not None or bc.bmi is not None):
+        bits = []
+        if bc.bodyFatPct is not None:
+            bits.append(f"{bc.bodyFatPct}% body fat")
+        if bc.leanMassKg is not None:
+            bits.append(f"{bc.leanMassKg} kg lean/muscle mass")
+        if bc.bmi is not None:
+            bits.append(f"BMI {bc.bmi}")
+        parts.append(
+            f"- Body composition (from smart scale): {', '.join(bits)}. "
+            "Use lean mass to gauge protein needs and body-fat trends over time; avoid over-indexing on BMI alone."
+        )
     return "\n".join(parts)
 
 

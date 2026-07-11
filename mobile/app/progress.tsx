@@ -10,7 +10,7 @@ import { useTheme } from '@/theme';
 import { relativeDay } from '@/utils/date';
 import { goalLabel } from '@/utils/nutrition';
 import { exerciseKey } from '@/utils/strength';
-import { displayToKg, kgToDisplay, unitLabel } from '@/utils/units';
+import { displayToKg, formatWeight, kgToDisplay, unitLabel } from '@/utils/units';
 
 export default function Progress() {
   const theme = useTheme();
@@ -169,6 +169,54 @@ export default function Progress() {
           </Card>
         )}
 
+        {/* Body composition (e.g. from a smart scale via Apple Health) */}
+        {profile?.bodyComposition &&
+        (profile.bodyComposition.bodyFatPct != null ||
+          profile.bodyComposition.leanMassKg != null ||
+          profile.bodyComposition.bmi != null) ? (
+          <>
+            <SectionHeader title="Body composition" />
+            <Card>
+              <View style={styles.compRow}>
+                {profile.bodyComposition.bodyFatPct != null ? (
+                  <View style={styles.compItem}>
+                    <Text variant="subtitle" color="brand">
+                      {profile.bodyComposition.bodyFatPct}%
+                    </Text>
+                    <Text variant="caption" color="textMuted">
+                      Body fat
+                    </Text>
+                  </View>
+                ) : null}
+                {profile.bodyComposition.leanMassKg != null ? (
+                  <View style={styles.compItem}>
+                    <Text variant="subtitle" color="brand">
+                      {formatWeight(profile.bodyComposition.leanMassKg, units)}
+                    </Text>
+                    <Text variant="caption" color="textMuted">
+                      Lean mass
+                    </Text>
+                  </View>
+                ) : null}
+                {profile.bodyComposition.bmi != null ? (
+                  <View style={styles.compItem}>
+                    <Text variant="subtitle" color="brand">
+                      {profile.bodyComposition.bmi}
+                    </Text>
+                    <Text variant="caption" color="textMuted">
+                      BMI
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text variant="caption" color="textFaint" style={{ marginTop: 12 }}>
+                From Apple Health
+                {profile.bodyComposition.updatedAt ? ` · updated ${relativeDay(profile.bodyComposition.updatedAt)}` : ''}
+              </Text>
+            </Card>
+          </>
+        ) : null}
+
         {/* Strength progress */}
         <SectionHeader title="Strength" />
         <Card>
@@ -236,4 +284,6 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   track: { height: 10, borderRadius: 999, overflow: 'hidden' },
   fill: { height: 10, borderRadius: 999 },
+  compRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  compItem: { flex: 1, alignItems: 'center' },
 });

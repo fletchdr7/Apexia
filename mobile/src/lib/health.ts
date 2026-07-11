@@ -31,12 +31,24 @@ const READ_TYPES = [
   'HKQuantityTypeIdentifierStepCount',
   'HKQuantityTypeIdentifierActiveEnergyBurned',
   'HKQuantityTypeIdentifierBodyMass',
+  'HKQuantityTypeIdentifierBodyFatPercentage',
+  'HKQuantityTypeIdentifierLeanBodyMass',
+  'HKQuantityTypeIdentifierBodyMassIndex',
 ] as const;
 
 export interface HealthSnapshot {
   steps?: number;
   activeEnergyKcal?: number;
 }
+
+export interface BodyComposition {
+  weightKg?: number;
+  bodyFatPct?: number;
+  leanMassKg?: number;
+  bmi?: number;
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
 
 export function isHealthAvailable(): boolean {
   const lib = hk();
@@ -94,8 +106,41 @@ export async function getLatestBodyMassKg(): Promise<number | undefined> {
   if (!lib || !isHealthAvailable()) return undefined;
   try {
     const sample = await lib.getMostRecentQuantitySample('HKQuantityTypeIdentifierBodyMass', 'kg');
-    return sample ? Math.round(sample.quantity * 10) / 10 : undefined;
+    return sample ? round1(sample.quantity) : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** Latest body composition (weight, body fat %, lean mass, BMI) from Apple Health. */
+export async function getLatestBodyComposition(): Promise<BodyComposition> {
+  const lib = hk();
+  if (!lib || !isHealthAvailable()) return {};
+  const out: BodyComposition = {};
+  try {
+    const s = await lib.getMostRecentQuantitySample('HKQuantityTypeIdentifierBodyMass', 'kg');
+    if (s) out.weightKg = round1(s.quantity);
+  } catch {
+    // ignore
+  }
+  try {
+    const s = await lib.getMostRecentQuantitySample('HKQuantityTypeIdentifierBodyFatPercentage', '%');
+    // HealthKit percent unit is a fraction (0.18 = 18%); normalize to a 0-100 number.
+    if (s) out.bodyFatPct = round1(s.quantity <= 1 ? s.quantity * 100 : s.quantity);
+  } catch {
+    // ignore
+  }
+  try {
+    const s = await lib.getMostRecentQuantitySample('HKQuantityTypeIdentifierLeanBodyMass', 'kg');
+    if (s) out.leanMassKg = round1(s.quantity);
+  } catch {
+    // ignore
+  }
+  try {
+    const s = await lib.getMostRecentQuantitySample('HKQuantityTypeIdentifierBodyMassIndex', 'count');
+    if (s) out.bmi = round1(s.quantity);
+  } catch {
+    // ignore
+  }
+  return out;
 }

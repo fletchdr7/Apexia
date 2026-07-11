@@ -38,6 +38,8 @@ export interface UserProfile {
   onboardedAt?: string;
   /** Selected AI coach avatar id (see constants/avatars). */
   coachAvatarId?: string;
+  /** Latest body composition (e.g. imported from a smart scale via Apple Health). */
+  bodyComposition?: { bodyFatPct?: number; leanMassKg?: number; bmi?: number; updatedAt?: string };
   /** Optional strength target for one lift (e.g. bench press to 100 kg). */
   strengthGoal?: { exercise: string; targetKg: number };
   // Derived nutrition targets
