@@ -49,6 +49,13 @@ jobs:
           # characters can't break the shell command.
           COMMIT_MSG: ${{ github.event.head_commit.message }}
           CI: "1"
+          # EXPO_PUBLIC_* values are inlined into the JS at bundle time. These must
+          # match eas.json's build env, otherwise OTA updates ship a bundle with an
+          # empty backend config (reverting the app to demo mode). All are
+          # client-public values (Supabase anon key + public URLs).
+          EXPO_PUBLIC_SUPABASE_URL: "https://wknbspbeubtlstieobxr.supabase.co"
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: "sb_publishable_FfxF4srSSwxguwofvuGIVg_f2hGmZpz"
+          EXPO_PUBLIC_AI_API_URL: "https://apexia-api.onrender.com"
         run: |
           MESSAGE="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
           if [ -z "$MESSAGE" ]; then MESSAGE="Update ${GITHUB_SHA:0:7}"; fi
