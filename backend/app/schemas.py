@@ -123,6 +123,10 @@ class EquipmentImageRequest(BaseModel):
     image: str
 
 
+class SupplementLookupRequest(BaseModel):
+    name: str
+
+
 class ChatMessageIn(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str

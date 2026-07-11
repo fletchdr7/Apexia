@@ -15,6 +15,7 @@ from .schemas import (
     ImageRequest,
     PlanRequest,
     SupplementImageRequest,
+    SupplementLookupRequest,
     SupplementResult,
     SwapRequest,
     SwapResponse,
@@ -64,6 +65,11 @@ def vision_food(req: ImageRequest, _auth=Depends(verify_auth)) -> FoodScanResult
 @app.post("/vision/supplement", response_model=SupplementResult)
 def vision_supplement(req: SupplementImageRequest, _auth=Depends(verify_auth)) -> SupplementResult:
     return ai.analyze_supplement(req.image)
+
+
+@app.post("/coach/supplement-lookup", response_model=SupplementResult)
+def coach_supplement_lookup(req: SupplementLookupRequest, _auth=Depends(verify_auth)) -> SupplementResult:
+    return ai.lookup_supplement(req.name)
 
 
 @app.post("/vision/equipment", response_model=EquipmentResult)

@@ -223,8 +223,20 @@ SUPPLEMENT_PROMPT = (
     "Respond ONLY with JSON: "
     '{"name": str, "brand": str, "form": one_of[capsule|tablet|powder|liquid|gummy|softgel], '
     '"servingSize": str, "ingredients": [{"name": str, "amount": num, "unit": str, "dailyValuePct": num}], '
-    '"purpose": str, "benefits": [str], "cautions": [str], "timing": str}. '
-    "Be accurate and evidence-based; keep benefits/cautions short."
+    '"purpose": str, "benefits": [str], "cautions": [str], "timing": str, "goalFit": num_0_to_1}. '
+    "Be accurate and evidence-based; keep benefits/cautions short. "
+    "If you cannot clearly identify the supplement from the image, set name to 'Unknown supplement', "
+    "leave ingredients/benefits/cautions empty, and set goalFit to 0."
+)
+
+SUPPLEMENT_LOOKUP_PROMPT = (
+    "Provide an evidence-based analysis of the dietary supplement named below. "
+    "Respond ONLY with JSON: "
+    '{"name": str, "form": one_of[capsule|tablet|powder|liquid|gummy|softgel], "servingSize": str, '
+    '"ingredients": [{"name": str, "amount": num, "unit": str}], "purpose": str, "benefits": [str], '
+    '"cautions": [str], "timing": str}. Keep it concise and accurate. '
+    "If the name is not a real/known supplement, set name to 'Unknown supplement' and leave the rest empty.\n"
+    "Supplement name: "
 )
 
 
@@ -257,16 +269,34 @@ def analyze_supplement(image_b64: str) -> SupplementResult:
 
 def _supplement_fallback() -> SupplementResult:
     return SupplementResult(
-        name="Creatine Monohydrate",
-        form="powder",
-        servingSize="5 g",
-        ingredients=[{"name": "Creatine Monohydrate", "amount": 5, "unit": "g"}],
-        purpose="Strength & power output",
-        benefits=["Increases strength and lean mass", "Supports recovery"],
-        cautions=["Stay hydrated"],
-        timing="Any time daily; consistency matters most",
-        goalFit=0.9,
+        name="Unknown supplement",
+        form="capsule",
+        ingredients=[],
+        purpose="",
+        benefits=[],
+        cautions=[],
+        goalFit=0,
     )
+
+
+def lookup_supplement(name: str) -> SupplementResult:
+    client = _client()
+    clean = (name or "").strip()
+    if client is None or not clean:
+        return SupplementResult(name=clean or "Unknown supplement", form="capsule", ingredients=[], benefits=[], cautions=[])
+    settings = get_settings()
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": SUPPLEMENT_LOOKUP_PROMPT + clean}],
+            max_tokens=600,
+            temperature=0.2,
+        )
+        data = _extract_json(resp.choices[0].message.content or "")
+        return SupplementResult.model_validate(data)
+    except Exception:
+        logger.exception("Supplement lookup failed")
+        return SupplementResult(name=clean, form="capsule", ingredients=[], benefits=[], cautions=[])
 
 
 # ---------------------------------------------------------------------------
