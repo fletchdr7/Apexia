@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import type {
   BodyAssessment,
+  BodyCompositionEntry,
   BodyScanResult,
   Equipment,
   ExerciseRecord,
@@ -26,6 +27,7 @@ import {
   supplementNutrients,
 } from '@/utils/nutrition';
 import {
+  DEMO_BODY_COMPOSITION,
   DEMO_FOODS,
   DEMO_SUPPLEMENTS,
   DEMO_SUPPLEMENT_LOGS,
@@ -49,6 +51,8 @@ interface PersistedState {
   exerciseHistory: Record<string, ExerciseRecord>;
   /** Body-weight history for progress tracking. */
   weightLogs: WeightEntry[];
+  /** Body-composition history (body fat %, lean mass, BMI) from a smart scale via Health. */
+  bodyCompositionLogs: BodyCompositionEntry[];
   /** Saved AI physique assessments (photos are not stored, only the report). */
   bodyScans: BodyAssessment[];
   seeded: boolean;
@@ -71,6 +75,7 @@ export type SyncableState = Pick<
   | 'homeEquipmentIds'
   | 'exerciseHistory'
   | 'weightLogs'
+  | 'bodyCompositionLogs'
   | 'bodyScans'
 >;
 
@@ -106,6 +111,9 @@ interface AppStoreValue extends PersistedState {
   // weight
   logWeight: (weightKg: number, dateKey?: string) => void;
   removeWeightLog: (id: string) => void;
+  // body composition (smart scale)
+  logBodyComposition: (entry: Omit<BodyCompositionEntry, 'id'>) => void;
+  mergeBodyComposition: (entries: Omit<BodyCompositionEntry, 'id'>[]) => number;
   // body scans
   addBodyScan: (result: BodyScanResult) => void;
   // equipment
@@ -132,6 +140,7 @@ const initialState: PersistedState = {
   homeEquipmentIds: [],
   exerciseHistory: {},
   weightLogs: [],
+  bodyCompositionLogs: [],
   bodyScans: [],
   seeded: false,
   guestMode: false,
@@ -149,8 +158,46 @@ function normalize(raw: Partial<PersistedState> & { selectedEquipmentIds?: strin
   merged.customEquipment = merged.customEquipment ?? [];
   merged.exerciseHistory = merged.exerciseHistory ?? {};
   merged.weightLogs = merged.weightLogs ?? [];
+  merged.bodyCompositionLogs = merged.bodyCompositionLogs ?? [];
   merged.bodyScans = merged.bodyScans ?? [];
   return merged;
+}
+
+/** Most recent defined value of each metric across (descending) logs. */
+function latestCompositionSnapshot(logs: BodyCompositionEntry[]): UserProfile['bodyComposition'] | undefined {
+  if (logs.length === 0) return undefined;
+  let bodyFatPct: number | undefined;
+  let leanMassKg: number | undefined;
+  let bmi: number | undefined;
+  for (const e of logs) {
+    if (bodyFatPct == null && e.bodyFatPct != null) bodyFatPct = e.bodyFatPct;
+    if (leanMassKg == null && e.leanMassKg != null) leanMassKg = e.leanMassKg;
+    if (bmi == null && e.bmi != null) bmi = e.bmi;
+  }
+  if (bodyFatPct == null && leanMassKg == null && bmi == null) return undefined;
+  return { bodyFatPct, leanMassKg, bmi, updatedAt: logs[0].loggedAt };
+}
+
+/** Merge incoming body-composition readings into state (one entry per day, latest wins). */
+function applyComposition(s: PersistedState, incoming: Omit<BodyCompositionEntry, 'id'>[]): PersistedState {
+  const byDay = new Map<string, BodyCompositionEntry>();
+  for (const e of s.bodyCompositionLogs) byDay.set(dateKeyOf(e.loggedAt), e);
+  for (const e of incoming) {
+    const key = dateKeyOf(e.loggedAt);
+    const base = byDay.get(key) ?? { id: uid('bc_'), loggedAt: e.loggedAt };
+    byDay.set(key, {
+      ...base,
+      loggedAt: e.loggedAt ?? base.loggedAt,
+      weightKg: e.weightKg ?? base.weightKg,
+      bodyFatPct: e.bodyFatPct ?? base.bodyFatPct,
+      leanMassKg: e.leanMassKg ?? base.leanMassKg,
+      bmi: e.bmi ?? base.bmi,
+    });
+  }
+  const bodyCompositionLogs = Array.from(byDay.values()).sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
+  const snapshot = latestCompositionSnapshot(bodyCompositionLogs);
+  const profile = s.profile && snapshot ? { ...s.profile, bodyComposition: snapshot } : s.profile;
+  return { ...s, bodyCompositionLogs, profile };
 }
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
@@ -192,12 +239,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (!s.seeded) {
         return {
           ...s,
-          profile,
+          profile: { ...profile, bodyComposition: latestCompositionSnapshot(DEMO_BODY_COMPOSITION) },
           weightLogs,
           workouts: DEMO_WORKOUTS,
           foods: DEMO_FOODS,
           supplements: DEMO_SUPPLEMENTS,
           supplementLogs: DEMO_SUPPLEMENT_LOGS,
+          bodyCompositionLogs: DEMO_BODY_COMPOSITION,
           seeded: true,
         };
       }
@@ -330,6 +378,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, weightLogs: s.weightLogs.filter((w) => w.id !== id) }));
   }, []);
 
+  const logBodyComposition = useCallback((entry: Omit<BodyCompositionEntry, 'id'>) => {
+    setState((s) => applyComposition(s, [entry]));
+  }, []);
+
+  const mergeBodyComposition = useCallback((entries: Omit<BodyCompositionEntry, 'id'>[]) => {
+    const distinctDays = new Set(entries.map((e) => dateKeyOf(e.loggedAt))).size;
+    setState((s) => applyComposition(s, entries));
+    return distinctDays;
+  }, []);
+
   const addBodyScan = useCallback((result: BodyScanResult) => {
     const entry: BodyAssessment = { id: uid('bs_'), createdAt: new Date().toISOString(), result };
     setState((s) => ({ ...s, bodyScans: [entry, ...s.bodyScans] }));
@@ -405,6 +463,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       homeEquipmentIds: state.homeEquipmentIds,
       exerciseHistory: state.exerciseHistory,
       weightLogs: state.weightLogs,
+      bodyCompositionLogs: state.bodyCompositionLogs,
       bodyScans: state.bodyScans,
     }),
     [
@@ -418,6 +477,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       state.homeEquipmentIds,
       state.exerciseHistory,
       state.weightLogs,
+      state.bodyCompositionLogs,
       state.bodyScans,
     ],
   );
@@ -448,6 +508,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       removeSupplementLog,
       logWeight,
       removeWeightLog,
+      logBodyComposition,
+      mergeBodyComposition,
       addBodyScan,
       addEquipment,
       removeEquipment,
@@ -482,6 +544,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       removeSupplementLog,
       logWeight,
       removeWeightLog,
+      logBodyComposition,
+      mergeBodyComposition,
       addBodyScan,
       addEquipment,
       removeEquipment,

@@ -8,17 +8,19 @@ import { Image } from 'expo-image';
 import { Button, Card, Chip, Screen, SectionHeader, Text } from '@/components';
 import { COACH_AVATARS } from '@/constants/avatars';
 import { config } from '@/lib/config';
-import { getLatestBodyComposition, isHealthAvailable, requestHealthPermissions } from '@/lib/health';
+import { getBodyCompositionSeries, getLatestBodyComposition, isHealthAvailable, requestHealthPermissions } from '@/lib/health';
 import { useAppStore } from '@/store/AppStore';
 import { useAuth } from '@/store/AuthContext';
 import { useTheme } from '@/theme';
+import { dateKeyOf } from '@/utils/date';
 import { goalLabel } from '@/utils/nutrition';
 import { formatHeight, formatWeight } from '@/utils/units';
 
 export default function Profile() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, resetAll, supplements, updateProfile, healthEnabled, setHealthEnabled, logWeight } = useAppStore();
+  const { profile, resetAll, supplements, updateProfile, healthEnabled, setHealthEnabled, logWeight, mergeBodyComposition } =
+    useAppStore();
   const { configured, session, email, signOut } = useAuth();
   const [healthBusy, setHealthBusy] = useState(false);
   const healthSupported = Platform.OS === 'ios' && isHealthAvailable();
@@ -39,30 +41,40 @@ export default function Profile() {
   };
 
   const importFromHealth = async () => {
-    setHealthBusy(true);
-    const comp = await getLatestBodyComposition();
-    setHealthBusy(false);
     if (!profile) return;
-    if (comp.weightKg) logWeight(comp.weightKg);
-    if (comp.bodyFatPct != null || comp.leanMassKg != null || comp.bmi != null) {
-      updateProfile({
-        bodyComposition: {
-          bodyFatPct: comp.bodyFatPct,
-          leanMassKg: comp.leanMassKg,
-          bmi: comp.bmi,
-          updatedAt: new Date().toISOString(),
-        },
-      });
+    setHealthBusy(true);
+    const series = await getBodyCompositionSeries(180);
+    const latest = series.length ? series[series.length - 1] : await getLatestBodyComposition();
+    setHealthBusy(false);
+
+    // Backfill weight history and body-composition trend.
+    for (const s of series) if (s.weightKg != null) logWeight(s.weightKg, dateKeyOf(s.date));
+    const days = series.length
+      ? mergeBodyComposition(
+          series.map((s) => ({
+            loggedAt: s.date,
+            weightKg: s.weightKg,
+            bodyFatPct: s.bodyFatPct,
+            leanMassKg: s.leanMassKg,
+            bmi: s.bmi,
+          })),
+        )
+      : 0;
+    if (!series.length && (latest.bodyFatPct != null || latest.leanMassKg != null || latest.bmi != null)) {
+      mergeBodyComposition([{ loggedAt: new Date().toISOString(), ...latest }]);
     }
+    if (!series.length && latest.weightKg != null) logWeight(latest.weightKg);
+
     const parts: string[] = [];
-    if (comp.weightKg) parts.push(formatWeight(comp.weightKg, profile.units));
-    if (comp.bodyFatPct != null) parts.push(`${comp.bodyFatPct}% fat`);
-    if (comp.leanMassKg != null) parts.push(`${formatWeight(comp.leanMassKg, profile.units)} lean`);
-    if (comp.bmi != null) parts.push(`BMI ${comp.bmi}`);
+    if (latest.weightKg != null) parts.push(formatWeight(latest.weightKg, profile.units));
+    if (latest.bodyFatPct != null) parts.push(`${latest.bodyFatPct}% fat`);
+    if (latest.leanMassKg != null) parts.push(`${formatWeight(latest.leanMassKg, profile.units)} lean`);
+    if (latest.bmi != null) parts.push(`BMI ${latest.bmi}`);
+    const suffix = days > 1 ? ` (${days} days of history for trends)` : '';
     Alert.alert(
       'Apple Health',
       parts.length
-        ? `Imported: ${parts.join(' · ')}.`
+        ? `Imported: ${parts.join(' · ')}${suffix}.`
         : 'No recent body data found. Make sure your smart scale (e.g. VeSync) is set to sync with Apple Health.',
     );
   };

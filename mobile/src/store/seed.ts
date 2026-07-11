@@ -1,4 +1,5 @@
 import type {
+  BodyCompositionEntry,
   FoodEntry,
   Supplement,
   SupplementLog,
@@ -9,6 +10,10 @@ import { computeTargets } from '@/utils/nutrition';
 
 function isoAgo(hours: number): string {
   return new Date(Date.now() - hours * 3_600_000).toISOString();
+}
+
+function isoDaysAgo(days: number): string {
+  return isoAgo(days * 24);
 }
 
 export const DEMO_PROFILE: UserProfile = (() => {
@@ -134,4 +139,13 @@ export const DEMO_SUPPLEMENTS: Supplement[] = [
 
 export const DEMO_SUPPLEMENT_LOGS: SupplementLog[] = [
   { id: 'sl1', supplementId: 's1', supplementName: 'Creatine Monohydrate', takenAt: isoAgo(7), dose: '5 g' },
+];
+
+// Simulated smart-scale trend: body fat trending down, lean mass up (recomposition).
+export const DEMO_BODY_COMPOSITION: BodyCompositionEntry[] = [
+  { id: 'bc_d1', loggedAt: isoDaysAgo(56), weightKg: 84.2, bodyFatPct: 22.5, leanMassKg: 62.6, bmi: 26.0 },
+  { id: 'bc_d2', loggedAt: isoDaysAgo(42), weightKg: 83.6, bodyFatPct: 21.6, leanMassKg: 63.1, bmi: 25.8 },
+  { id: 'bc_d3', loggedAt: isoDaysAgo(28), weightKg: 83.1, bodyFatPct: 20.8, leanMassKg: 63.6, bmi: 25.6 },
+  { id: 'bc_d4', loggedAt: isoDaysAgo(14), weightKg: 82.6, bodyFatPct: 20.1, leanMassKg: 64.0, bmi: 25.5 },
+  { id: 'bc_d5', loggedAt: isoDaysAgo(3), weightKg: 82.0, bodyFatPct: 19.4, leanMassKg: 64.4, bmi: 25.3 },
 ];

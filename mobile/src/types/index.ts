@@ -52,6 +52,16 @@ export interface WeightEntry {
   weightKg: number;
 }
 
+/** A body-composition reading (e.g. from a smart scale via Apple Health). */
+export interface BodyCompositionEntry {
+  id: string;
+  loggedAt: string; // ISO
+  weightKg?: number;
+  bodyFatPct?: number;
+  leanMassKg?: number;
+  bmi?: number;
+}
+
 export interface NutritionTargets {
   calories: number;
   proteinG: number;

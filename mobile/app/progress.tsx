@@ -10,12 +10,13 @@ import { useTheme } from '@/theme';
 import { relativeDay } from '@/utils/date';
 import { goalLabel } from '@/utils/nutrition';
 import { exerciseKey } from '@/utils/strength';
-import { displayToKg, formatWeight, kgToDisplay, unitLabel } from '@/utils/units';
+import { metricSeries, trainingImpactInsight } from '@/utils/trends';
+import { displayToKg, kgToDisplay, unitLabel } from '@/utils/units';
 
 export default function Progress() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, weightLogs, logWeight, exerciseHistory, updateProfile } = useAppStore();
+  const { profile, weightLogs, logWeight, exerciseHistory, updateProfile, bodyCompositionLogs, workouts } = useAppStore();
   const units = profile?.units ?? 'imperial';
   const u = unitLabel(units);
 
@@ -43,6 +44,16 @@ export default function Progress() {
         .slice(0, 6),
     [exerciseHistory],
   );
+
+  const fatSeries = useMemo(() => metricSeries(bodyCompositionLogs, 'bodyFatPct'), [bodyCompositionLogs]);
+  const leanSeries = useMemo(() => metricSeries(bodyCompositionLogs, 'leanMassKg'), [bodyCompositionLogs]);
+  const bmiSeries = useMemo(() => metricSeries(bodyCompositionLogs, 'bmi'), [bodyCompositionLogs]);
+  const impact = useMemo(
+    () => trainingImpactInsight(bodyCompositionLogs, workouts, profile?.goal ?? 'maintain'),
+    [bodyCompositionLogs, workouts, profile?.goal],
+  );
+  const comp = profile?.bodyComposition;
+  const hasComposition = !!(fatSeries || leanSeries || bmiSeries || comp);
 
   const promptWeight = () => {
     const cur = current ?? profile?.weightKg ?? 0;
@@ -170,50 +181,82 @@ export default function Progress() {
         )}
 
         {/* Body composition (e.g. from a smart scale via Apple Health) */}
-        {profile?.bodyComposition &&
-        (profile.bodyComposition.bodyFatPct != null ||
-          profile.bodyComposition.leanMassKg != null ||
-          profile.bodyComposition.bmi != null) ? (
+        {hasComposition ? (
           <>
             <SectionHeader title="Body composition" />
             <Card>
               <View style={styles.compRow}>
-                {profile.bodyComposition.bodyFatPct != null ? (
-                  <View style={styles.compItem}>
-                    <Text variant="subtitle" color="brand">
-                      {profile.bodyComposition.bodyFatPct}%
-                    </Text>
-                    <Text variant="caption" color="textMuted">
-                      Body fat
-                    </Text>
-                  </View>
-                ) : null}
-                {profile.bodyComposition.leanMassKg != null ? (
-                  <View style={styles.compItem}>
-                    <Text variant="subtitle" color="brand">
-                      {formatWeight(profile.bodyComposition.leanMassKg, units)}
-                    </Text>
-                    <Text variant="caption" color="textMuted">
-                      Lean mass
-                    </Text>
-                  </View>
-                ) : null}
-                {profile.bodyComposition.bmi != null ? (
-                  <View style={styles.compItem}>
-                    <Text variant="subtitle" color="brand">
-                      {profile.bodyComposition.bmi}
-                    </Text>
-                    <Text variant="caption" color="textMuted">
-                      BMI
-                    </Text>
-                  </View>
-                ) : null}
+                <MetricTile
+                  label="Body fat"
+                  value={fatSeries ? `${fatSeries.latest}%` : comp?.bodyFatPct != null ? `${comp.bodyFatPct}%` : '—'}
+                  delta={fatSeries && fatSeries.points.length >= 2 ? `${signed(fatSeries.delta)}%` : undefined}
+                  deltaColor={fatSeries ? goodBad(-fatSeries.delta, theme) : undefined}
+                />
+                <MetricTile
+                  label="Lean mass"
+                  value={
+                    leanSeries
+                      ? `${kgToDisplay(leanSeries.latest, units)}`
+                      : comp?.leanMassKg != null
+                        ? `${kgToDisplay(comp.leanMassKg, units)}`
+                        : '—'
+                  }
+                  unit={leanSeries || comp?.leanMassKg != null ? u : undefined}
+                  delta={
+                    leanSeries && leanSeries.points.length >= 2
+                      ? `${signed(kgToDisplay(leanSeries.delta, units))} ${u}`
+                      : undefined
+                  }
+                  deltaColor={leanSeries ? goodBad(leanSeries.delta, theme) : undefined}
+                />
+                <MetricTile
+                  label="BMI"
+                  value={bmiSeries ? `${bmiSeries.latest}` : comp?.bmi != null ? `${comp.bmi}` : '—'}
+                  delta={bmiSeries && bmiSeries.points.length >= 2 ? signed(bmiSeries.delta) : undefined}
+                  deltaColor={theme.colors.textMuted}
+                />
               </View>
-              <Text variant="caption" color="textFaint" style={{ marginTop: 12 }}>
-                From Apple Health
-                {profile.bodyComposition.updatedAt ? ` · updated ${relativeDay(profile.bodyComposition.updatedAt)}` : ''}
-              </Text>
+
+              {fatSeries && fatSeries.points.length >= 2 ? (
+                <MiniTrend label="Body fat %" values={fatSeries.points.map((p) => p.value)} />
+              ) : null}
+              {leanSeries && leanSeries.points.length >= 2 ? (
+                <MiniTrend label={`Lean mass (${u})`} values={leanSeries.points.map((p) => kgToDisplay(p.value, units))} />
+              ) : null}
+
+              {comp?.updatedAt ? (
+                <Text variant="caption" color="textFaint" style={{ marginTop: 12 }}>
+                  From Apple Health · updated {relativeDay(comp.updatedAt)}
+                </Text>
+              ) : null}
             </Card>
+
+            {impact ? (
+              <Card style={{ marginTop: 8 }}>
+                <View style={styles.rowBetween}>
+                  <Text variant="label">Training impact</Text>
+                  <Ionicons
+                    name={impact.positive === true ? 'trending-up' : impact.positive === false ? 'trending-down' : 'analytics'}
+                    size={18}
+                    color={
+                      impact.positive === true
+                        ? theme.colors.success
+                        : impact.positive === false
+                          ? theme.colors.warning
+                          : theme.colors.textMuted
+                    }
+                  />
+                </View>
+                <Text color="textMuted" style={{ marginTop: 8, lineHeight: 20 }}>
+                  {impact.text}
+                </Text>
+              </Card>
+            ) : bodyCompositionLogs.length < 2 ? (
+              <Text color="textFaint" variant="caption" style={{ marginTop: 8 }}>
+                Import from Apple Health regularly (Profile → Apple Health) to unlock trend analysis of how your training is
+                moving these numbers.
+              </Text>
+            ) : null}
           </>
         ) : null}
 
@@ -276,6 +319,61 @@ export default function Progress() {
         <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+const signed = (n: number) => `${n > 0 ? '+' : ''}${n}`;
+
+function goodBad(v: number, theme: ReturnType<typeof useTheme>): string {
+  if (v > 0.0001) return theme.colors.success;
+  if (v < -0.0001) return theme.colors.warning;
+  return theme.colors.textMuted;
+}
+
+function MetricTile({
+  label,
+  value,
+  unit,
+  delta,
+  deltaColor,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  delta?: string;
+  deltaColor?: string;
+}) {
+  return (
+    <View style={styles.compItem}>
+      <Text variant="subtitle" color="brand">
+        {value}
+        {unit ? (
+          <Text variant="caption" color="textMuted">
+            {' '}
+            {unit}
+          </Text>
+        ) : null}
+      </Text>
+      <Text variant="caption" color="textMuted">
+        {label}
+      </Text>
+      {delta ? (
+        <Text variant="caption" style={{ color: deltaColor, marginTop: 2 }}>
+          {delta}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function MiniTrend({ label, values }: { label: string; values: number[] }) {
+  return (
+    <View style={{ marginTop: 14 }}>
+      <Text variant="caption" color="textFaint" style={{ marginBottom: 4 }}>
+        {label}
+      </Text>
+      <Sparkline values={values} height={48} />
+    </View>
   );
 }
 
