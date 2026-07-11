@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, Chip, Input, Text } from '@/components';
+import { estimateFood } from '@/lib/api';
 import { searchFoods, type FoodSearchResult } from '@/lib/foodSearch';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
@@ -26,6 +27,8 @@ export default function LogFood() {
 
   const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [noResults, setNoResults] = useState(false);
+  const [estimating, setEstimating] = useState(false);
   const [basisNote, setBasisNote] = useState<string | null>(null);
   const skipSearch = useRef(false);
 
@@ -38,14 +41,17 @@ export default function LogFood() {
     const q = name.trim();
     if (q.length < 2) {
       setResults([]);
+      setNoResults(false);
       return;
     }
     const ctrl = new AbortController();
     setSearching(true);
+    setNoResults(false);
     const timer = setTimeout(async () => {
       try {
         const r = await searchFoods(q, ctrl.signal);
         setResults(r);
+        setNoResults(r.length === 0);
       } catch {
         setResults([]);
       } finally {
@@ -67,6 +73,22 @@ export default function LogFood() {
     setFat(String(Math.round(r.nutrients.fatG)));
     setBasisNote(r.basis === 'serving' ? `Per serving (${r.servingLabel})` : 'Per 100 g — adjust servings');
     setResults([]);
+    setNoResults(false);
+  };
+
+  const estimate = async () => {
+    const q = name.trim();
+    if (q.length < 2) return;
+    setEstimating(true);
+    try {
+      const r = await estimateFood(q);
+      select(r);
+      setBasisNote(`AI estimate (${r.servingLabel}) — adjust as needed`);
+    } catch {
+      // ignore
+    } finally {
+      setEstimating(false);
+    }
   };
 
   const canSave = name.trim().length > 0 && Number(calories) > 0;
@@ -138,6 +160,24 @@ export default function LogFood() {
               Nutrition data from Open Food Facts
             </Text>
           </View>
+        ) : null}
+
+        {noResults && !searching ? (
+          <Card onPress={estimate} style={{ marginBottom: 8 }}>
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text variant="label">Estimate “{name.trim()}” with AI</Text>
+                <Text variant="caption" color="textMuted">
+                  No database match — get an AI nutrition estimate
+                </Text>
+              </View>
+              {estimating ? (
+                <ActivityIndicator color={theme.colors.brand} />
+              ) : (
+                <Ionicons name="sparkles" size={20} color={theme.colors.brand} />
+              )}
+            </View>
+          </Card>
         ) : null}
 
         <Text variant="label" color="textMuted" style={{ marginBottom: 8, marginTop: 4 }}>

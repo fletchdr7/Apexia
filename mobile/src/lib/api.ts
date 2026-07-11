@@ -4,12 +4,14 @@ import type {
   CoachPlan,
   EquipmentScanResult,
   FoodScanResult,
+  Nutrients,
   PlannedExercise,
   Supplement,
   UserProfile,
   WorkoutLocation,
   WorkoutPlan,
 } from '@/types';
+import type { FoodSearchResult } from '@/lib/foodSearch';
 import { COMMON_SUPPLEMENTS, GOAL_SUPPLEMENT_HINTS } from '@/constants/supplements';
 import { selectLibraryExercises, swapCandidates, type ExerciseMedia } from '@/lib/exerciseMedia';
 import { uid } from '@/utils/id';
@@ -87,6 +89,25 @@ function mockFoodScan(mode: 'label' | 'plate'): FoodScanResult {
     total: { calories: 515, proteinG: 52, carbsG: 57, fatG: 8, fiberG: 5 },
     confidence: 0.68,
     notes: 'Demo estimate. Connect the AI backend for a vision model that reads your actual plate.',
+  };
+}
+
+/** AI nutrition estimate for a typed food (fallback when Open Food Facts misses). */
+export async function estimateFood(name: string): Promise<FoodSearchResult> {
+  const clean = name.trim();
+  if (config.hasAiBackend) {
+    const r = await post<{ name: string; servingLabel: string; nutrients: Nutrients; confidence: number }>(
+      '/coach/food-lookup',
+      { name: clean },
+    );
+    return { id: `ai:${clean}`, name: r.name || clean, nutrients: r.nutrients, basis: 'serving', servingLabel: r.servingLabel || '1 serving' };
+  }
+  return {
+    id: `ai:${clean}`,
+    name: clean,
+    nutrients: { calories: 200, proteinG: 8, carbsG: 25, fatG: 8 },
+    basis: 'serving',
+    servingLabel: '1 serving',
   };
 }
 
