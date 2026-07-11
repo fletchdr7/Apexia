@@ -10,12 +10,16 @@ name: EAS Update (OTA)
 # Create the token at https://expo.dev -> Account settings -> Access tokens.
 
 on:
-  # Manual trigger from the Actions tab (works even when no mobile/ files changed).
+  # Manual trigger from the Actions tab (e.g. to force a republish).
   workflow_dispatch:
   push:
     branches:
       - main
       - cursor/apexia-fitness-app-foundation-e8c8
+    paths:
+      # Only publish an OTA update when the app itself changes (saves CI minutes
+      # and avoids redundant updates). Use "Run workflow" to force a publish.
+      - "mobile/**"
 
 jobs:
   update:
