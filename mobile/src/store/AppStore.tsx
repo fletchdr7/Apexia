@@ -8,6 +8,7 @@ import type {
   Equipment,
   ExerciseRecord,
   FoodEntry,
+  FrequentFood,
   Supplement,
   SupplementLog,
   UserProfile,
@@ -121,6 +122,7 @@ interface AppStoreValue extends PersistedState {
   removeEquipment: (id: string) => void;
   toggleEquipment: (id: string, location: WorkoutLocation) => void;
   // derived helpers
+  frequentFoods: (limit?: number) => FrequentFood[];
   foodsForDate: (dateKey: string) => FoodEntry[];
   workoutsForDate: (dateKey: string) => WorkoutEntry[];
   nutritionForDate: (dateKey: string) => ReturnType<typeof emptyNutrients>;
@@ -422,6 +424,39 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const frequentFoods = useCallback(
+    (limit = 6): FrequentFood[] => {
+      const groups = new Map<string, { template: FoodEntry; count: number; lastAt: string }>();
+      for (const f of state.foods) {
+        const key = f.name.trim().toLowerCase();
+        if (!key) continue;
+        const g = groups.get(key);
+        if (!g) {
+          groups.set(key, { template: f, count: 1, lastAt: f.loggedAt });
+        } else {
+          g.count += 1;
+          if (f.loggedAt > g.lastAt) {
+            g.lastAt = f.loggedAt;
+            g.template = f; // most recent logging becomes the quick-add template
+          }
+        }
+      }
+      return Array.from(groups.entries())
+        .sort((a, b) => b[1].count - a[1].count || b[1].lastAt.localeCompare(a[1].lastAt))
+        .slice(0, limit)
+        .map(([key, g]) => ({
+          key,
+          name: g.template.name,
+          slot: g.template.slot,
+          servings: g.template.servings,
+          nutrients: g.template.nutrients,
+          source: g.template.source,
+          count: g.count,
+        }));
+    },
+    [state.foods],
+  );
+
   const foodsForDate = useCallback(
     (dateKey: string) => state.foods.filter((f) => dateKeyOf(f.loggedAt) === dateKey),
     [state.foods],
@@ -514,6 +549,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addEquipment,
       removeEquipment,
       toggleEquipment,
+      frequentFoods,
       foodsForDate,
       workoutsForDate,
       nutritionForDate,
@@ -550,6 +586,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addEquipment,
       removeEquipment,
       toggleEquipment,
+      frequentFoods,
       foodsForDate,
       workoutsForDate,
       nutritionForDate,

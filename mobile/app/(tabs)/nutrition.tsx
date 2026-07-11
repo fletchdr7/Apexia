@@ -5,7 +5,7 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Card, Chip, DateBar, EmptyState, MacroBar, Screen, SectionHeader, Text } from '@/components';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
-import type { FoodEntry, MealSlot } from '@/types';
+import type { FoodEntry, FrequentFood, MealSlot } from '@/types';
 import { dateKeyOf, timeLabel } from '@/utils/date';
 import { doseServings, supplementHasMacros, supplementNutrients } from '@/utils/nutrition';
 
@@ -27,13 +27,37 @@ const SOURCE_ICON: Record<FoodEntry['source'], keyof typeof Ionicons.glyphMap> =
 export default function Nutrition() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, selectedDate, setSelectedDate, foodsForDate, nutritionForDate, removeFood, supplements, supplementLogs, logSupplement, removeSupplementLog } =
-    useAppStore();
+  const {
+    profile,
+    selectedDate,
+    setSelectedDate,
+    foodsForDate,
+    nutritionForDate,
+    removeFood,
+    addFood,
+    dateStamp,
+    frequentFoods,
+    supplements,
+    supplementLogs,
+    logSupplement,
+    removeSupplementLog,
+  } = useAppStore();
 
   const foods = foodsForDate(selectedDate);
   const nutrition = nutritionForDate(selectedDate);
   const targets = profile?.targets;
   const daySupps = supplementLogs.filter((l) => dateKeyOf(l.takenAt) === selectedDate);
+  const frequent = frequentFoods(8).filter((f) => f.count >= 2);
+
+  const quickAdd = (item: FrequentFood) =>
+    addFood({
+      name: item.name,
+      slot: item.slot,
+      servings: item.servings,
+      nutrients: item.nutrients,
+      source: item.source,
+      loggedAt: dateStamp(),
+    });
 
   const confirmRemoveFood = (f: FoodEntry) =>
     Alert.alert('Remove food', `Remove ${f.name}?`, [
@@ -100,6 +124,25 @@ export default function Nutrition() {
           </Text>
         </Pressable>
       </View>
+
+      {frequent.length > 0 ? (
+        <View style={{ marginTop: 4 }}>
+          <SectionHeader title="Quick add" />
+          <Text variant="caption" color="textMuted" style={{ marginBottom: 8 }}>
+            Your regulars — one tap to log to this day.
+          </Text>
+          <View style={styles.quickChips}>
+            {frequent.map((f) => (
+              <Chip
+                key={f.key}
+                label={`${f.name} · ${Math.round(f.nutrients.calories * f.servings)} kcal`}
+                icon="add"
+                onPress={() => quickAdd(f)}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       {foods.length === 0 ? (
         <View style={{ marginTop: 8 }}>
@@ -217,4 +260,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
   icon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   suppChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  quickChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

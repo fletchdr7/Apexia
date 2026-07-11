@@ -133,6 +133,17 @@ export interface FoodEntry {
   confidence?: number; // 0..1 for AI estimates
 }
 
+/** A frequently-logged food, derived from history, for one-tap re-logging. */
+export interface FrequentFood {
+  key: string;
+  name: string;
+  slot: MealSlot;
+  servings: number;
+  nutrients: Nutrients;
+  source: FoodEntry['source'];
+  count: number;
+}
+
 export type SupplementForm = 'capsule' | 'tablet' | 'powder' | 'liquid' | 'gummy' | 'softgel';
 
 export interface SupplementIngredient {

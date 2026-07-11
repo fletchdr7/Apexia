@@ -83,7 +83,13 @@ export const DEMO_WORKOUTS: WorkoutEntry[] = [
   },
 ];
 
+const OATMEAL_NUTRIENTS = { calories: 320, proteinG: 12, carbsG: 54, fatG: 7, fiberG: 8, sugarG: 12 };
+
 export const DEMO_FOODS: FoodEntry[] = [
+  // A repeated breakfast so the "Quick add" regulars surface right away.
+  { id: 'f_oat1', name: 'Oatmeal + banana', slot: 'breakfast', loggedAt: isoDaysAgo(3), servings: 1, source: 'search', nutrients: OATMEAL_NUTRIENTS },
+  { id: 'f_oat2', name: 'Oatmeal + banana', slot: 'breakfast', loggedAt: isoDaysAgo(2), servings: 1, source: 'search', nutrients: OATMEAL_NUTRIENTS },
+  { id: 'f_oat3', name: 'Oatmeal + banana', slot: 'breakfast', loggedAt: isoDaysAgo(1), servings: 1, source: 'search', nutrients: OATMEAL_NUTRIENTS },
   {
     id: 'f1',
     name: 'Greek yogurt + berries',
