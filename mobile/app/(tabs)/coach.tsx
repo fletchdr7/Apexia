@@ -132,6 +132,9 @@ export default function Coach() {
           ) : null}
         </ScrollView>
 
+        <Text variant="caption" color="textFaint" center style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+          Evidence‑based guidance from mainstream guidelines — not medical advice.
+        </Text>
         <View style={[styles.inputBar, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
           <View style={[styles.inputWrap, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <TextInput
