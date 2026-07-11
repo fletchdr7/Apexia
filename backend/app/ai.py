@@ -438,7 +438,7 @@ def analyze_body_scan(req: BodyScanRequest) -> BodyScanResult:
         resp = client.chat.completions.create(
             model=settings.openai_vision_model,
             messages=[
-                {"role": "system", "content": BODY_SCAN_SYSTEM},
+                {"role": "system", "content": f"{BODY_SCAN_SYSTEM}\n\n{EVIDENCE_PREAMBLE}\n\n{EVIDENCE_FACTS}"},
                 {"role": "user", "content": content},
             ],
             max_tokens=1200,
@@ -487,12 +487,38 @@ def _body_scan_fallback(req: BodyScanRequest) -> BodyScanResult:
 # ---------------------------------------------------------------------------
 
 
+EVIDENCE_PREAMBLE = (
+    "Ground every recommendation in mainstream, peer-reviewed health science and major guidelines "
+    "(WHO, CDC, ACSM, the International Society of Sports Nutrition [ISSN], the Academy of Nutrition "
+    "and Dietetics, and NIH / Dietary Guidelines for Americans). "
+    "Do NOT invent facts, statistics, studies, authors, years, or citations — if you are unsure or the "
+    "evidence is weak, say so plainly and give conservative, widely-accepted guidance instead of a "
+    "confident-sounding guess. Prefer established ranges over precise but unsupported numbers. "
+    "When you give a key recommendation you may name the guideline body it aligns with (e.g. 'per ACSM'), "
+    "but never fabricate a specific paper or DOI. "
+    "You are not a medical provider: do not diagnose or treat conditions; recommend a qualified "
+    "professional for medical, injury, pregnancy, medication, or clinical-nutrition needs, and advise "
+    "seeing a doctor for red-flag symptoms (chest pain, dizziness/fainting, signs of disordered eating). "
+    "Keep advice safe, sustainable, and non-judgmental."
+)
+
+EVIDENCE_FACTS = (
+    "Well-established anchors to rely on: protein ~1.6-2.2 g/kg/day supports muscle growth (ISSN); "
+    "creatine monohydrate 3-5 g/day is safe and effective for strength (ISSN); adults benefit from "
+    ">=150 min/week moderate aerobic activity plus >=2 days/week resistance training (WHO/CDC/ACSM); "
+    "a sustainable weight-change rate is ~0.5-1% of bodyweight per week; adults need 7-9 h sleep "
+    "(AASM/CDC); hydration roughly 30-35 ml/kg/day. Individual needs vary — note that when relevant."
+)
+
+
 def _system_prompt(profile: Optional[Profile]) -> str:
     base = (
+        f"{EVIDENCE_PREAMBLE}\n\n"
         "You are Apexia, a friendly, practical fitness and nutrition coach. "
         "Your user often has a hectic life (job, kids). Favor flexible, realistic advice over rigid routines. "
         "Be encouraging and concise. Never shame the user for missing a day. "
-        "Give specific, actionable suggestions for meals, workouts, and supplements."
+        "Give specific, actionable suggestions for meals, workouts, and supplements. "
+        f"\n\n{EVIDENCE_FACTS}"
     )
     if not profile:
         return base
@@ -524,8 +550,8 @@ def coach_chat(messages: list[ChatMessageIn], profile: Optional[Profile]) -> str
         resp = client.chat.completions.create(
             model=settings.openai_model,
             messages=payload,
-            max_tokens=400,
-            temperature=0.6,
+            max_tokens=450,
+            temperature=0.4,
         )
         return (resp.choices[0].message.content or "").strip() or _coach_fallback(messages, profile)
     except Exception:
