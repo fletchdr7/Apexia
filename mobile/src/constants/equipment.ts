@@ -41,3 +41,44 @@ export const EQUIPMENT_CATALOG: Equipment[] = [
   { id: 'eq_medball', name: 'Medicine Ball', category: 'accessory', primaryMuscles: ['Core'], source: 'catalog', exampleExercises: ['Slam', 'Russian twist'] },
   { id: 'eq_jumprope', name: 'Jump Rope', category: 'accessory', primaryMuscles: ['Cardio', 'Calves'], source: 'catalog', exampleExercises: ['Skipping intervals'] },
 ];
+
+/**
+ * Maps a catalog equipment id to the equipment tags used by the exercise library,
+ * so workout generation only picks exercises you can actually do.
+ */
+export const LIBRARY_EQUIPMENT_BY_ID: Record<string, string[]> = {
+  eq_barbell: ['barbell'],
+  eq_dumbbells: ['dumbbell'],
+  eq_kettlebell: ['kettlebell'],
+  eq_ez_bar: ['e-z curl bar', 'barbell'],
+  eq_bench: [],
+  eq_squat_rack: ['barbell'],
+  eq_smith: ['machine'],
+  eq_leg_press: ['machine'],
+  eq_leg_curl: ['machine'],
+  eq_leg_ext: ['machine'],
+  eq_chest_press: ['machine'],
+  eq_lat_pulldown: ['cable', 'machine'],
+  eq_cable: ['cable'],
+  eq_treadmill: [],
+  eq_rower: ['machine'],
+  eq_bike: ['machine'],
+  eq_elliptical: ['machine'],
+  eq_pullup: ['body only'],
+  eq_dip: ['body only'],
+  eq_bands: ['bands'],
+  eq_trx: ['body only', 'other'],
+  eq_medball: ['medicine ball'],
+  eq_jumprope: ['other'],
+};
+
+/** Fallback mapping for scanned/custom equipment, by category. */
+export const LIBRARY_EQUIPMENT_BY_CATEGORY: Record<EquipmentCategory, string[]> = {
+  free_weights: ['barbell', 'dumbbell', 'kettlebell'],
+  machine: ['machine'],
+  cable: ['cable'],
+  cardio: ['machine'],
+  bodyweight: ['body only'],
+  accessory: ['bands', 'medicine ball', 'exercise ball', 'other'],
+  other: ['other'],
+};

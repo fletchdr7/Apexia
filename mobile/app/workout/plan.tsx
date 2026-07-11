@@ -5,9 +5,9 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View }
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, Chip, ExerciseDemo, Text } from '@/components';
-import { EQUIPMENT_CATALOG } from '@/constants/equipment';
+import { EQUIPMENT_CATALOG, LIBRARY_EQUIPMENT_BY_CATEGORY, LIBRARY_EQUIPMENT_BY_ID } from '@/constants/equipment';
 import { MUSCLE_GROUPS } from '@/constants/muscles';
-import { generateWorkoutPlan, swapExercise, type EquipmentInput } from '@/lib/api';
+import { generateWorkoutPlan, swapExercise } from '@/lib/api';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { ExperienceLevel, PlannedExercise, WorkoutLocation, WorkoutPlan } from '@/types';
@@ -37,10 +37,14 @@ export default function BuildWorkout() {
   const allEquip = useMemo(() => [...EQUIPMENT_CATALOG, ...customEquipment], [customEquipment]);
   const ids = location === 'gym' ? gymEquipmentIds : homeEquipmentIds;
   const equipForLocation = useMemo(() => allEquip.filter((e) => ids.includes(e.id)), [allEquip, ids]);
-  const equipInput = useMemo<EquipmentInput[]>(
-    () => equipForLocation.map((e) => ({ name: e.name, exampleExercises: e.exampleExercises, primaryMuscles: e.primaryMuscles })),
-    [equipForLocation],
-  );
+  const availableEquipment = useMemo(() => {
+    const set = new Set<string>(['body only']);
+    for (const e of equipForLocation) {
+      const tags = e.source === 'catalog' ? LIBRARY_EQUIPMENT_BY_ID[e.id] : LIBRARY_EQUIPMENT_BY_CATEGORY[e.category];
+      (tags ?? []).forEach((t) => set.add(t));
+    }
+    return [...set];
+  }, [equipForLocation]);
 
   // Preload remembered weights and apply progressive overload to any exercise
   // the user has performed before.
@@ -75,7 +79,7 @@ export default function BuildWorkout() {
         location,
         durationMin: duration,
         muscleGroups: muscles,
-        equipment: equipInput,
+        availableEquipment,
       });
       setPlan(result);
       const displayed = result.exercises.map((ex) => ({
@@ -117,7 +121,7 @@ export default function BuildWorkout() {
         profile,
         exercise: exercises[i].name,
         muscles: exercises[i].muscles ?? muscles,
-        equipment: equipInput,
+        availableEquipment,
       });
       setSwapOptions(opts);
     } catch {

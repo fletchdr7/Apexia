@@ -11,9 +11,10 @@ import type {
   WorkoutPlan,
 } from '@/types';
 import { COMMON_SUPPLEMENTS, GOAL_SUPPLEMENT_HINTS } from '@/constants/supplements';
+import { selectLibraryExercises, swapCandidates, type ExerciseMedia } from '@/lib/exerciseMedia';
 import { uid } from '@/utils/id';
 import { goalLabel } from '@/utils/nutrition';
-import { estimateWeightKg, repSchemeForGoal } from '@/utils/strength';
+import { estimateWeightKg, repSchemeForGoal, type RepScheme } from '@/utils/strength';
 import { config } from './config';
 import { supabase } from './supabase';
 
@@ -124,133 +125,73 @@ export async function analyzeEquipmentPhoto(imageBase64: string): Promise<Equipm
 // Workout plan builder
 // ---------------------------------------------------------------------------
 
-export interface EquipmentInput {
-  name: string;
-  exampleExercises?: string[];
-  primaryMuscles?: string[];
-}
-
 export interface WorkoutPlanParams {
   profile: UserProfile | null;
   location: WorkoutLocation;
   durationMin: number;
   muscleGroups: string[];
-  equipment: EquipmentInput[];
+  /** Equipment tags the user has, in exercise-library terms (e.g. 'barbell'). */
+  availableEquipment: string[];
 }
 
+function cap(s: string): string {
+  return s.length ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+function toPlanned(lib: ExerciseMedia, profile: UserProfile | null, scheme: RepScheme): PlannedExercise {
+  const bodyweight = profile?.weightKg ?? 75;
+  const experience = profile?.experience ?? 'beginner';
+  const sexFactor = profile?.sex === 'female' ? 0.7 : 1;
+  const isBody = !lib.equipment || lib.equipment === 'body only';
+  const kg = isBody ? undefined : estimateWeightKg(lib.name, bodyweight, experience, sexFactor);
+  return {
+    name: lib.name,
+    equipment: lib.equipment ?? undefined,
+    sets: scheme.sets,
+    reps: scheme.reps,
+    restSec: scheme.restSec,
+    muscles: lib.primaryMuscles,
+    suggestedWeight: isBody ? 'bodyweight' : kg ? `~${kg} kg` : 'moderate',
+  };
+}
+
+/**
+ * Builds the plan directly from the bundled exercise library so every suggested
+ * exercise is a real entry with a matching demo, muscles, and instructions.
+ */
 export async function generateWorkoutPlan(params: WorkoutPlanParams): Promise<WorkoutPlan> {
-  if (config.hasAiBackend) {
-    return post<WorkoutPlan>('/coach/workout', {
-      profile: params.profile,
-      location: params.location,
-      durationMin: params.durationMin,
-      muscleGroups: params.muscleGroups,
-      equipment: params.equipment,
-    });
-  }
-  return localWorkoutPlan(params);
+  const scheme = repSchemeForGoal(params.profile?.goal ?? 'maintain');
+  const slots = Math.max(3, Math.min(8, Math.floor((params.durationMin - 10) / 7)));
+  const available = new Set(params.availableEquipment);
+  const libs = selectLibraryExercises(params.muscleGroups, available, slots);
+  const exercises = libs.map((l) => toPlanned(l, params.profile, scheme));
+  const focusGroups = params.muscleGroups.filter((m) => m !== 'full_body');
+  const focus = focusGroups.length ? focusGroups.map(cap).join(' & ') : 'Full body';
+  return {
+    title: `${params.location === 'home' ? 'Home' : 'Gym'} · ${focus}`,
+    focus,
+    location: params.location,
+    durationMin: params.durationMin,
+    warmup: ['5 min easy cardio', 'Dynamic stretches for the muscles you\u2019ll train'],
+    exercises,
+    cooldown: ['3\u20135 min easy walk', 'Stretch the muscles you trained'],
+    notes: 'Tap an exercise for a demo. Adjust weights so the last 1\u20132 reps are challenging.',
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 export interface SwapExerciseParams {
   profile: UserProfile | null;
   exercise: string;
   muscles: string[];
-  equipment: EquipmentInput[];
+  availableEquipment: string[];
 }
 
-/** Returns alternative exercises for the same muscle group from available equipment. */
+/** Alternative library exercises for the same muscle(s) — always demo-backed. */
 export async function swapExercise(params: SwapExerciseParams): Promise<PlannedExercise[]> {
-  if (config.hasAiBackend) {
-    const res = await post<{ alternatives: PlannedExercise[] }>('/coach/swap', {
-      profile: params.profile,
-      exercise: params.exercise,
-      muscles: params.muscles,
-      equipment: params.equipment,
-    });
-    return res.alternatives ?? [];
-  }
-  return localSwaps(params);
-}
-
-function localSwaps({ profile, exercise, muscles, equipment }: SwapExerciseParams): PlannedExercise[] {
-  const scheme = repSchemeForGoal(profile?.goal ?? 'maintain');
-  const target = muscles.map((m) => m.toLowerCase());
-  const pool: PlannedExercise[] = [];
-  for (const e of equipment) {
-    const matches = target.length === 0 || (e.primaryMuscles ?? []).some((m) => target.some((t) => m.toLowerCase().includes(t) || t.includes(m.toLowerCase())));
-    if (!matches) continue;
-    for (const ex of e.exampleExercises ?? [e.name]) {
-      if (ex.toLowerCase() === exercise.toLowerCase()) continue;
-      pool.push({
-        name: ex,
-        equipment: e.name,
-        sets: scheme.sets,
-        reps: scheme.reps,
-        restSec: scheme.restSec,
-        muscles: e.primaryMuscles,
-        suggestedWeight: e.name.toLowerCase() === 'bodyweight' ? 'bodyweight' : 'moderate',
-      });
-    }
-  }
-  // de-dup by name
-  const seen = new Set<string>();
-  return pool.filter((p) => (seen.has(p.name) ? false : (seen.add(p.name), true))).slice(0, 6);
-}
-
-function localWorkoutPlan({ profile, location, durationMin, muscleGroups, equipment }: WorkoutPlanParams): WorkoutPlan {
-  const goal = profile?.goal ?? 'maintain';
-  const scheme = repSchemeForGoal(goal);
-  const experience = profile?.experience ?? 'beginner';
-  const bodyweight = profile?.weightKg ?? 75;
-  const sexFactor = profile?.sex === 'female' ? 0.7 : 1;
-  const slots = Math.max(3, Math.min(8, Math.floor((durationMin - 10) / 7)));
-
-  const wantsAll = muscleGroups.length === 0 || muscleGroups.includes('full_body');
-  const targets = muscleGroups.map((m) => m.toLowerCase());
-  const matchesMuscle = (muscles?: string[]) =>
-    wantsAll || (muscles ?? []).some((m) => targets.some((t) => m.toLowerCase().includes(t) || t.includes(m.toLowerCase())));
-
-  const pool: { name: string; equipment: string; muscles?: string[] }[] = [];
-  for (const e of equipment) {
-    if (!matchesMuscle(e.primaryMuscles)) continue;
-    const exercises = e.exampleExercises && e.exampleExercises.length ? e.exampleExercises : [e.name];
-    for (const ex of exercises) pool.push({ name: ex, equipment: e.name, muscles: e.primaryMuscles });
-  }
-  const base = pool.length
-    ? pool
-    : [
-        { name: 'Push-ups', equipment: 'Bodyweight' },
-        { name: 'Bodyweight squats', equipment: 'Bodyweight' },
-        { name: 'Plank', equipment: 'Bodyweight' },
-        { name: 'Lunges', equipment: 'Bodyweight' },
-        { name: 'Glute bridge', equipment: 'Bodyweight' },
-      ];
-
-  const exercises: PlannedExercise[] = base.slice(0, slots).map((c) => {
-    const kg = estimateWeightKg(c.name, bodyweight, experience, sexFactor);
-    const isBodyweight = c.equipment.toLowerCase() === 'bodyweight';
-    return {
-      name: c.name,
-      equipment: c.equipment,
-      sets: scheme.sets,
-      reps: scheme.reps,
-      restSec: scheme.restSec,
-      muscles: c.muscles,
-      suggestedWeight: isBodyweight ? 'bodyweight' : kg ? `~${kg} kg` : 'moderate',
-    };
-  });
-
-  return {
-    title: `${location === 'home' ? 'Home' : 'Gym'} workout`,
-    focus: 'Full body',
-    location,
-    durationMin,
-    warmup: ['5 min easy cardio', 'Dynamic stretches for the muscles you\u2019ll train'],
-    exercises,
-    cooldown: ['3\u20135 min easy walk', 'Stretch the muscles you trained'],
-    notes: 'Starting estimate \u2014 adjust so the last 1\u20132 reps are challenging.',
-    generatedAt: new Date().toISOString(),
-  };
+  const scheme = repSchemeForGoal(params.profile?.goal ?? 'maintain');
+  const cands = swapCandidates(params.muscles, new Set(params.availableEquipment), params.exercise, 6);
+  return cands.map((l) => toPlanned(l, params.profile, scheme));
 }
 
 export function analyzeSupplementForGoal(
