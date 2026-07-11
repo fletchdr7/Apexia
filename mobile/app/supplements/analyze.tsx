@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, Card, Text } from '@/components';
-import { analyzeSupplementForGoal, analyzeSupplementPhoto } from '@/lib/api';
+import { Button, Card, Input, Text } from '@/components';
+import { analyzeSupplementForGoal, analyzeSupplementPhoto, lookupSupplement } from '@/lib/api';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { Supplement } from '@/types';
@@ -18,13 +18,33 @@ export default function AnalyzeSupplement() {
   const theme = useTheme();
   const router = useRouter();
   const { addSupplement, profile } = useAppStore();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const manual = params.mode === 'manual';
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
 
-  const [phase, setPhase] = useState<Phase>('capture');
-  const [result, setResult] = useState<Omit<Supplement, 'id'> | null>(null);
+  const emptyResult: Omit<Supplement, 'id'> = { name: '', form: 'capsule', ingredients: [] };
+  const [phase, setPhase] = useState<Phase>(manual ? 'result' : 'capture');
+  const [result, setResult] = useState<Omit<Supplement, 'id'>>(manual ? emptyResult : emptyResult);
+  const [looking, setLooking] = useState(false);
 
-  const analysis = result ? analyzeSupplementForGoal(result, profile) : null;
+  const analysis = result.name && result.name !== 'Unknown supplement' ? analyzeSupplementForGoal(result, profile) : null;
+
+  const setName = (name: string) => setResult((r) => ({ ...r, name }));
+
+  const doLookup = async () => {
+    const nm = result.name.trim();
+    if (!nm) return;
+    setLooking(true);
+    try {
+      const res = await lookupSupplement(nm);
+      setResult({ ...res, goalFit: analyzeSupplementForGoal(res, profile).goalFit });
+    } catch {
+      // keep current
+    } finally {
+      setLooking(false);
+    }
+  };
 
   const run = async (base64: string) => {
     setPhase('analyzing');
@@ -32,7 +52,7 @@ export default function AnalyzeSupplement() {
       const res = await analyzeSupplementPhoto(base64);
       setResult({ ...res, goalFit: analyzeSupplementForGoal(res, profile).goalFit });
     } catch {
-      setResult(null);
+      setResult({ name: 'Unknown supplement', form: 'capsule', ingredients: [] });
     } finally {
       setPhase('result');
     }
@@ -50,7 +70,7 @@ export default function AnalyzeSupplement() {
   };
 
   const addToStack = () => {
-    if (!result) return;
+    if (!result.name.trim()) return;
     addSupplement(result);
     router.back();
   };
@@ -117,30 +137,41 @@ export default function AnalyzeSupplement() {
 
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
-      <Header title="Analysis" onClose={() => router.back()} />
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        {result ? (
-          <>
+      <Header title={manual ? 'Add supplement' : 'Analysis'} onClose={() => router.back()} />
+      <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+        <>
             <Card>
-              <View style={styles.rowBetween}>
-                <Text variant="subtitle" style={{ flex: 1 }}>
-                  {result.name}
+              <Input
+                label="Supplement name"
+                value={result.name === 'Unknown supplement' ? '' : result.name}
+                onChangeText={setName}
+                placeholder="e.g. Magnesium Glycinate"
+                autoCapitalize="words"
+              />
+              <Button
+                label="Look up details"
+                icon="search"
+                variant="secondary"
+                onPress={doLookup}
+                loading={looking}
+                disabled={!result.name.trim() || result.name === 'Unknown supplement'}
+              />
+              {result.name === 'Unknown supplement' ? (
+                <Text variant="caption" color="textMuted" style={{ marginTop: 8 }}>
+                  Couldn&apos;t identify the label — type the name above and tap Look up.
                 </Text>
-                {analysis ? (
-                  <View style={[styles.fit, { backgroundColor: theme.colors.brandSoft }]}>
-                    <Text variant="caption" style={{ color: theme.colors.brand }}>
-                      {Math.round(analysis.goalFit * 100)}% fit
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
+              ) : null}
               {result.purpose ? (
-                <Text color="textMuted" style={{ marginTop: 4 }}>
+                <Text color="textMuted" style={{ marginTop: 10 }}>
                   {result.purpose}
                 </Text>
               ) : null}
               {analysis ? (
-                <Text style={{ marginTop: 10, color: theme.colors.brand }}>{analysis.verdict}</Text>
+                <View style={[styles.fit, { alignSelf: 'flex-start', marginTop: 10, backgroundColor: theme.colors.brandSoft }]}>
+                  <Text variant="caption" style={{ color: theme.colors.brand }}>
+                    {Math.round(analysis.goalFit * 100)}% fit · {analysis.verdict}
+                  </Text>
+                </View>
               ) : null}
             </Card>
 
@@ -176,20 +207,12 @@ export default function AnalyzeSupplement() {
               </Card>
             ) : null}
           </>
-        ) : (
-          <Card>
-            <Text variant="subtitle">Couldn't read that label</Text>
-            <Text color="textMuted" style={{ marginTop: 6 }}>
-              Try again with a clearer photo of the ingredients panel.
-            </Text>
-          </Card>
-        )}
       </ScrollView>
       <View style={[styles.footer, { borderTopColor: theme.colors.border }]}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Button label="Rescan" variant="secondary" onPress={() => setPhase('capture')} />
+          <Button label={manual ? 'Scan' : 'Rescan'} variant="secondary" onPress={() => setPhase('capture')} />
           <View style={{ flex: 1 }}>
-            <Button label="Add to my stack" icon="add" onPress={addToStack} disabled={!result} />
+            <Button label="Add to my stack" icon="add" onPress={addToStack} disabled={!result.name.trim()} />
           </View>
         </View>
       </View>

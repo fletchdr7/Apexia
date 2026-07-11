@@ -98,8 +98,21 @@ export async function analyzeSupplementPhoto(imageBase64: string): Promise<Omit<
   if (config.hasAiBackend) {
     return post<Omit<Supplement, 'id'>>('/vision/supplement', { image: imageBase64 });
   }
-  const sample = COMMON_SUPPLEMENTS[0];
-  return { ...sample, name: sample.name };
+  return { name: 'Unknown supplement', form: 'capsule', ingredients: [] };
+}
+
+/** Look up a supplement's details by name (like the food search, AI-backed). */
+export async function lookupSupplement(name: string): Promise<Omit<Supplement, 'id'>> {
+  const clean = name.trim();
+  if (config.hasAiBackend) {
+    return post<Omit<Supplement, 'id'>>('/coach/supplement-lookup', { name: clean });
+  }
+  const q = clean.toLowerCase();
+  const found = COMMON_SUPPLEMENTS.find(
+    (s) => s.name.toLowerCase().includes(q) || (q && q.includes(s.name.toLowerCase().split(' ')[0])),
+  );
+  if (found) return { ...found };
+  return { name: clean || 'Unknown supplement', form: 'capsule', ingredients: [] };
 }
 
 // ---------------------------------------------------------------------------

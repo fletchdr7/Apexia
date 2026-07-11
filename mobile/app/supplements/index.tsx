@@ -32,7 +32,17 @@ export default function Supplements() {
         <Text variant="heading" style={{ flex: 1 }}>
           Supplements
         </Text>
-        <Button label="Analyze" icon="camera" onPress={() => router.push('/supplements/analyze')} fullWidth={false} size="sm" />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Button
+            label="Add"
+            icon="add"
+            variant="secondary"
+            onPress={() => router.push({ pathname: '/supplements/analyze', params: { mode: 'manual' } })}
+            fullWidth={false}
+            size="sm"
+          />
+          <Button label="Scan" icon="camera" onPress={() => router.push('/supplements/analyze')} fullWidth={false} size="sm" />
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
