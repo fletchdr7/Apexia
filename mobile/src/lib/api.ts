@@ -155,6 +155,11 @@ function toPlanned(lib: ExerciseMedia, profile: UserProfile | null, scheme: RepS
   };
 }
 
+/** Convert a library exercise into a planned exercise for the user's goal. */
+export function plannedFromMedia(media: ExerciseMedia, profile: UserProfile | null): PlannedExercise {
+  return toPlanned(media, profile, repSchemeForGoal(profile?.goal ?? 'maintain'));
+}
+
 /**
  * Builds the plan directly from the bundled exercise library so every suggested
  * exercise is a real entry with a matching demo, muscles, and instructions.

@@ -142,6 +142,28 @@ export function selectLibraryExercises(
   return chosen;
 }
 
+export const BROWSE_GROUPS: { id: string; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'chest', label: 'Chest' },
+  { id: 'back', label: 'Back' },
+  { id: 'legs', label: 'Legs' },
+  { id: 'glutes', label: 'Glutes' },
+  { id: 'shoulders', label: 'Shoulders' },
+  { id: 'arms', label: 'Arms' },
+  { id: 'core', label: 'Core' },
+];
+
+/** Browse the whole library, filtered by muscle group, search text, and equipment. */
+export function browseLibrary(opts: { group: string; query?: string; available?: Set<string> }): ExerciseMedia[] {
+  const libs = opts.group === 'all' || opts.group === 'full_body' ? null : MUSCLE_GROUP_TO_LIBRARY[opts.group] ?? [];
+  const q = (opts.query ?? '').trim().toLowerCase();
+  let list = LIB.filter((e) => e.images.length > 0);
+  if (libs) list = list.filter((e) => e.primaryMuscles.some((m) => libs.includes(m)));
+  if (opts.available) list = list.filter((e) => canUseEquipment(e, opts.available!));
+  if (q) list = list.filter((e) => e.name.toLowerCase().includes(q));
+  return list.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 120);
+}
+
 /** Alternative library exercises for the same muscle(s), for the swap feature. */
 export function swapCandidates(
   muscles: string[],

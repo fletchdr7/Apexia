@@ -4,6 +4,7 @@ export { Chip } from './Chip';
 export { DateBar } from './DateBar';
 export { EmptyState } from './EmptyState';
 export { ExerciseDemo } from './ExerciseDemo';
+export { ExercisePicker } from './ExercisePicker';
 export { Input } from './Input';
 export { MacroBar } from './MacroBar';
 export { ProgressRing } from './ProgressRing';

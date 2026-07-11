@@ -4,10 +4,11 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, Card, Chip, ExerciseDemo, Text } from '@/components';
+import { Button, Card, Chip, ExerciseDemo, ExercisePicker, Text } from '@/components';
 import { EQUIPMENT_CATALOG, LIBRARY_EQUIPMENT_BY_CATEGORY, LIBRARY_EQUIPMENT_BY_ID } from '@/constants/equipment';
 import { MUSCLE_GROUPS } from '@/constants/muscles';
-import { generateWorkoutPlan, swapExercise } from '@/lib/api';
+import { generateWorkoutPlan, plannedFromMedia, swapExercise } from '@/lib/api';
+import type { ExerciseMedia } from '@/lib/exerciseMedia';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { ExperienceLevel, PlannedExercise, WorkoutLocation, WorkoutPlan } from '@/types';
@@ -33,6 +34,7 @@ export default function BuildWorkout() {
   const [swapFor, setSwapFor] = useState<number | null>(null);
   const [swapOptions, setSwapOptions] = useState<PlannedExercise[]>([]);
   const [swapLoading, setSwapLoading] = useState(false);
+  const [pickerFor, setPickerFor] = useState<number | null>(null);
 
   const allEquip = useMemo(() => [...EQUIPMENT_CATALOG, ...customEquipment], [customEquipment]);
   const ids = location === 'gym' ? gymEquipmentIds : homeEquipmentIds;
@@ -139,6 +141,14 @@ export default function BuildWorkout() {
         return applyHistory([merged])[0];
       }),
     );
+    setSwapFor(null);
+  };
+
+  const pickFromLibrary = (media: ExerciseMedia) => {
+    if (pickerFor == null) return;
+    const planned = applyHistory([plannedFromMedia(media, profile)])[0];
+    setExercises((prev) => prev.map((ex, idx) => (idx === pickerFor ? planned : ex)));
+    setPickerFor(null);
     setSwapFor(null);
   };
 
@@ -291,6 +301,14 @@ export default function BuildWorkout() {
                         No alternatives found for your equipment.
                       </Text>
                     )}
+                    <Button
+                      label="Browse all exercises"
+                      icon="search"
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => setPickerFor(i)}
+                      style={{ marginTop: 10 }}
+                    />
                   </View>
                 ) : null}
               </Card>
@@ -300,6 +318,13 @@ export default function BuildWorkout() {
           </View>
         ) : null}
       </ScrollView>
+
+      <ExercisePicker
+        visible={pickerFor != null}
+        available={new Set(availableEquipment)}
+        onClose={() => setPickerFor(null)}
+        onSelect={pickFromLibrary}
+      />
     </SafeAreaView>
   );
 }
