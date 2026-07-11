@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, Card, Text } from '@/components';
+import { Button, Card, ExerciseDemo, Text } from '@/components';
 import { ACTIVITIES } from '@/constants/activities';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
@@ -164,11 +164,16 @@ export default function WorkoutSession() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
-        <Text variant="title">{ex.name}</Text>
-        <Text color="textMuted" style={{ marginTop: 4 }}>
-          {ex.equipment ? `${ex.equipment} · ` : ''}Target {ex.sets} × {ex.reps}
-          {ex.suggestedWeight ? ` @ ${ex.suggestedWeight}` : ''}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <ExerciseDemo name={ex.name} muscles={ex.muscles} size={60} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text variant="title">{ex.name}</Text>
+            <Text color="textMuted" style={{ marginTop: 4 }}>
+              {ex.equipment ? `${ex.equipment} · ` : ''}Target {ex.sets} × {ex.reps}
+              {ex.suggestedWeight ? ` @ ${ex.suggestedWeight}` : ''}
+            </Text>
+          </View>
+        </View>
 
         {rest !== null && rest > 0 ? (
           <Card style={{ marginTop: 16, borderColor: theme.colors.brand, borderWidth: 1 }}>

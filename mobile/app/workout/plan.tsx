@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, Card, Chip, Text } from '@/components';
+import { Button, Card, Chip, ExerciseDemo, Text } from '@/components';
 import { EQUIPMENT_CATALOG } from '@/constants/equipment';
 import { MUSCLE_GROUPS } from '@/constants/muscles';
 import { generateWorkoutPlan, swapExercise, type EquipmentInput } from '@/lib/api';
@@ -232,7 +232,8 @@ export default function BuildWorkout() {
             {exercises.map((ex, i) => (
               <Card key={`${ex.name}-${i}`} style={{ marginTop: 12 }}>
                 <View style={styles.row}>
-                  <View style={{ flex: 1 }}>
+                  <ExerciseDemo name={ex.name} muscles={ex.muscles} size={44} />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text variant="label">{ex.name}</Text>
                     {ex.equipment ? (
                       <Text variant="caption" color="textFaint">

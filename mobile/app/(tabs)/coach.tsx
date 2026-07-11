@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
@@ -13,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components';
+import { getCoachAvatar } from '@/constants/avatars';
 import { config } from '@/lib/config';
 import { chatWithCoach } from '@/lib/api';
 import { useAppStore } from '@/store/AppStore';
@@ -31,6 +33,7 @@ export default function Coach() {
   const theme = useTheme();
   const router = useRouter();
   const { profile } = useAppStore();
+  const coachAvatar = getCoachAvatar(profile?.coachAvatarId);
   const scrollRef = useRef<ScrollView>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -74,11 +77,15 @@ export default function Coach() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-        <View style={[styles.avatar, { backgroundColor: theme.colors.brand }]}>
-          <Ionicons name="sparkles" size={18} color={theme.colors.onBrand} />
-        </View>
+        {coachAvatar ? (
+          <Image source={coachAvatar.source} style={styles.avatar} contentFit="cover" />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: theme.colors.brand, alignItems: 'center', justifyContent: 'center' }]}>
+            <Ionicons name="sparkles" size={18} color={theme.colors.onBrand} />
+          </View>
+        )}
         <View style={{ flex: 1 }}>
-          <Text variant="subtitle">Apexia Coach</Text>
+          <Text variant="subtitle">{coachAvatar ? `Coach ${coachAvatar.label}` : 'Apexia Coach'}</Text>
           <Text variant="caption" color="textMuted">
             {config.hasAiBackend ? 'AI-powered' : 'Demo mode · connect AI backend for full power'}
           </Text>

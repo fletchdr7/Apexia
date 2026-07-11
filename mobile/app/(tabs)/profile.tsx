@@ -3,7 +3,10 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
+import { Image } from 'expo-image';
+
 import { Button, Card, Chip, Screen, SectionHeader, Text } from '@/components';
+import { COACH_AVATARS } from '@/constants/avatars';
 import { config } from '@/lib/config';
 import { getLatestBodyMassKg, isHealthAvailable, requestHealthPermissions } from '@/lib/health';
 import { useAppStore } from '@/store/AppStore';
@@ -99,6 +102,30 @@ export default function Profile() {
         <TargetRow label="Carbs" value={`${profile.targets.carbsG} g`} color={theme.colors.carbs} />
         <TargetRow label="Fat" value={`${profile.targets.fatG} g`} color={theme.colors.fat} />
         <TargetRow label="Water" value={`${(profile.targets.waterMl / 1000).toFixed(1)} L`} color={theme.colors.info} last />
+      </Card>
+
+      <SectionHeader title="Coach avatar" />
+      <Card>
+        <Text color="textMuted" style={{ marginBottom: 14 }}>
+          Choose your AI coach.
+        </Text>
+        <View style={styles.avatarRow}>
+          {COACH_AVATARS.map((a) => {
+            const selected = profile.coachAvatarId === a.id;
+            return (
+              <Pressable key={a.id} onPress={() => updateProfile({ coachAvatarId: a.id })} style={styles.avatarPick}>
+                <Image
+                  source={a.source}
+                  style={[styles.avatarImg, { borderColor: selected ? theme.colors.brand : 'transparent' }]}
+                  contentFit="cover"
+                />
+                <Text variant="caption" color={selected ? 'brand' : 'textMuted'} style={{ marginTop: 6 }}>
+                  {a.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </Card>
 
       <SectionHeader title="Manage" />
@@ -298,4 +325,8 @@ const styles = StyleSheet.create({
   tag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   aboutRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
   reset: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 28, padding: 12 },
+  avatarRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  avatarPick: { alignItems: 'center' },
+  avatarImg: { width: 64, height: 64, borderRadius: 32, borderWidth: 3 },
 });
+
