@@ -12,7 +12,7 @@ import type {
   WorkoutLocation,
   WorkoutPlan,
 } from '@/types';
-import { stampForDate, todayKey } from '@/utils/date';
+import { dateKeyOf, stampForDate, todayKey } from '@/utils/date';
 import { uid } from '@/utils/id';
 import { addNutrients, emptyNutrients } from '@/utils/nutrition';
 import {
@@ -293,11 +293,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const foodsForDate = useCallback(
-    (dateKey: string) => state.foods.filter((f) => f.loggedAt.slice(0, 10) === dateKey),
+    (dateKey: string) => state.foods.filter((f) => dateKeyOf(f.loggedAt) === dateKey),
     [state.foods],
   );
   const workoutsForDate = useCallback(
-    (dateKey: string) => state.workouts.filter((w) => w.performedAt.slice(0, 10) === dateKey),
+    (dateKey: string) => state.workouts.filter((w) => dateKeyOf(w.performedAt) === dateKey),
     [state.workouts],
   );
   const nutritionForDate = useCallback(

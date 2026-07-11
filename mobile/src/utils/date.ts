@@ -1,9 +1,18 @@
+/** Local calendar day key (YYYY-MM-DD) using the device timezone, not UTC. */
 export function todayKey(d: Date = new Date()): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Local day key for a stored ISO timestamp. */
+export function dateKeyOf(iso: string): string {
+  return todayKey(new Date(iso));
 }
 
 export function isSameDay(iso: string, ref: Date = new Date()): boolean {
-  return iso.slice(0, 10) === todayKey(ref);
+  return dateKeyOf(iso) === todayKey(ref);
 }
 
 export function greeting(d: Date = new Date()): string {
@@ -45,11 +54,11 @@ export function stampForDate(key: string): string {
 }
 
 export function relativeDay(iso: string): string {
-  const now = new Date();
-  const then = new Date(iso);
-  const diffDays = Math.floor((now.getTime() - then.getTime()) / 86_400_000);
-  if (diffDays <= 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return then.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const thenKey = dateKeyOf(iso);
+  const today = todayKey();
+  if (thenKey === today) return 'Today';
+  if (thenKey === addDaysKey(today, -1)) return 'Yesterday';
+  const diffDays = Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (diffDays > 0 && diffDays < 7) return `${diffDays} days ago`;
+  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }

@@ -205,8 +205,12 @@ function Header({ title, onClose, light }: { title: string; onClose: () => void;
       <Text variant="heading" style={{ color }}>
         {title}
       </Text>
-      <Pressable onPress={onClose} hitSlop={10}>
-        <Ionicons name="close" size={28} color={color} />
+      <Pressable
+        onPress={onClose}
+        hitSlop={16}
+        style={[styles.closeBtn, { backgroundColor: light ? 'rgba(0,0,0,0.45)' : theme.colors.cardMuted }]}
+      >
+        <Ionicons name="close" size={24} color={color} />
       </Pressable>
     </View>
   );
@@ -244,8 +248,9 @@ function InfoCard({
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'space-between' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'space-between', zIndex: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, zIndex: 20 },
+  closeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   reticle: { width: 280, height: 200, borderRadius: 20, borderWidth: 2, borderColor: 'rgba(255,255,255,0.85)' },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 40, paddingBottom: 10 },
   libraryBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
