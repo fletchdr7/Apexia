@@ -19,6 +19,8 @@ from .schemas import (
     ChatMessageIn,
     CoachPlan,
     DailyPlanItem,
+    BodyScanRequest,
+    BodyScanResult,
     EquipmentInput,
     EquipmentResult,
     FoodScanResult,
@@ -319,6 +321,87 @@ def _equipment_fallback() -> EquipmentResult:
         exampleExercises=[],
         confidence=0.4,
         notes="Heuristic fallback.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Body scan (physique assessment + personalized plan)
+# ---------------------------------------------------------------------------
+
+BODY_SCAN_SYSTEM = (
+    "You are Apexia, a supportive, professional personal trainer. You are analyzing "
+    "progress photos to give constructive, encouraging, health- and performance-focused "
+    "guidance. STRICT RULES: be kind and body-positive, never shaming; do NOT give medical "
+    "diagnoses; do NOT state exact body-fat percentages as fact (use gentle qualitative ranges "
+    "only); avoid any language that could encourage disordered eating; focus on actionable, "
+    "sustainable habits. Use ALL of the user's data provided to personalize the plan."
+)
+
+BODY_SCAN_PROMPT = (
+    "Analyze the physique photo(s) together with the user's data below and produce a personalized "
+    "assessment. Respond ONLY with JSON: {\"summary\": str, \"estimatedComposition\": str (gentle, "
+    "qualitative, e.g. 'lean and athletic'), \"focusAreas\": [{\"area\": str, \"observation\": str, "
+    "\"action\": str}], \"training\": [str], \"nutrition\": [str], \"milestones\": [str], "
+    "\"encouragement\": str, \"disclaimer\": str, \"confidence\": num_0_to_1}. "
+    "3-5 focus areas; training/nutrition as concise, specific bullets tuned to their goal, equipment, "
+    "and current numbers; 2-4 realistic milestones. Keep it motivating and practical.\n\nUSER DATA:\n"
+)
+
+
+def analyze_body_scan(req: BodyScanRequest) -> BodyScanResult:
+    client = _client()
+    data_blob = json.dumps({"profile": req.profile.model_dump() if req.profile else None, "context": req.context})
+    if client is None or not req.images:
+        return _body_scan_fallback(req)
+    settings = get_settings()
+    try:
+        content: list = [{"type": "text", "text": BODY_SCAN_PROMPT + data_blob}]
+        for img in req.images[:3]:
+            content.append({"type": "image_url", "image_url": {"url": _data_uri(img)}})
+        resp = client.chat.completions.create(
+            model=settings.openai_vision_model,
+            messages=[
+                {"role": "system", "content": BODY_SCAN_SYSTEM},
+                {"role": "user", "content": content},
+            ],
+            max_tokens=1200,
+            temperature=0.5,
+        )
+        parsed = _extract_json(resp.choices[0].message.content or "")
+        result = BodyScanResult.model_validate(parsed)
+        if not result.disclaimer:
+            result.disclaimer = (
+                "This is an AI estimate from photos for general guidance only — not medical advice. "
+                "Consult a professional for personalized medical or nutrition needs."
+            )
+        return result
+    except Exception:
+        logger.exception("Body scan call failed; using heuristic")
+        return _body_scan_fallback(req)
+
+
+def _body_scan_fallback(req: BodyScanRequest) -> BodyScanResult:
+    goal = (req.profile.goal if req.profile and req.profile.goal else "maintain")
+    supps = ", ".join(GOAL_SUPPLEMENTS.get(goal, [])[:2])
+    return BodyScanResult(
+        summary=f"A personalized plan focused on {GOAL_LABELS.get(goal, goal)}, built from your logged data.",
+        estimatedComposition="Add photos and connect the AI backend for a visual assessment.",
+        focusAreas=[
+            {"area": "Consistency", "observation": "Progress comes from repeatable habits.", "action": "Hit your weekly workout target and protein goal most days."},
+            {"area": "Progressive overload", "observation": "Strength drives change.", "action": "Add reps or a little weight each session on your key lifts."},
+        ],
+        training=[
+            "Train each muscle group ~2x/week with your available equipment.",
+            "Prioritize compound lifts; add isolation for lagging areas.",
+        ],
+        nutrition=[
+            f"Hit ~{int(req.profile.targets.proteinG)}g protein daily." if req.profile and req.profile.targets else "Keep protein high and consistent.",
+            "Favor whole foods; keep calories aligned with your goal.",
+        ],
+        milestones=["Log 4 workouts/week for a month", "Add 2.5kg to a main lift", "Stay within calorie target 5 days/week"],
+        encouragement="You've got the tools and the data — small consistent steps compound fast.",
+        disclaimer="General guidance only, not medical advice.",
+        confidence=0.5,
     )
 
 

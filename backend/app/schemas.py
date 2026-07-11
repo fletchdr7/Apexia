@@ -61,6 +61,24 @@ class EquipmentResult(BaseModel):
     notes: Optional[str] = None
 
 
+class BodyFocusArea(BaseModel):
+    area: str
+    observation: str
+    action: str
+
+
+class BodyScanResult(BaseModel):
+    summary: str
+    estimatedComposition: Optional[str] = None
+    focusAreas: list[BodyFocusArea] = []
+    training: list[str] = []
+    nutrition: list[str] = []
+    milestones: list[str] = []
+    encouragement: str = ""
+    disclaimer: str = ""
+    confidence: float = Field(default=0.5, ge=0, le=1)
+
+
 class NutritionTargets(BaseModel):
     calories: float
     proteinG: float
@@ -84,6 +102,12 @@ class Profile(BaseModel):
     lifestyle: list[str] = []
     dietaryPreferences: list[str] = []
     targets: Optional[NutritionTargets] = None
+
+
+class BodyScanRequest(BaseModel):
+    images: list[str] = []
+    profile: Optional[Profile] = None
+    context: Optional[dict] = None
 
 
 class ImageRequest(BaseModel):

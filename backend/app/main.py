@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import __version__, ai
 from .config import get_settings
 from .schemas import (
+    BodyScanRequest,
+    BodyScanResult,
     ChatRequest,
     ChatResponse,
     CoachPlan,
@@ -77,6 +79,11 @@ def coach_chat(req: ChatRequest, _auth=Depends(verify_auth)) -> ChatResponse:
 @app.post("/coach/plan", response_model=CoachPlan)
 def coach_plan(req: PlanRequest, _auth=Depends(verify_auth)) -> CoachPlan:
     return ai.daily_plan(req.profile)
+
+
+@app.post("/coach/body-scan", response_model=BodyScanResult)
+def coach_body_scan(req: BodyScanRequest, _auth=Depends(verify_auth)) -> BodyScanResult:
+    return ai.analyze_body_scan(req)
 
 
 @app.post("/coach/workout", response_model=WorkoutPlan)
