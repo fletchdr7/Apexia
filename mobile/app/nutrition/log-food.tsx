@@ -1,9 +1,11 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, Chip, Input, Text } from '@/components';
+import { Button, Card, Chip, Input, Text } from '@/components';
+import { searchFoods, type FoodSearchResult } from '@/lib/foodSearch';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { MealSlot } from '@/types';
@@ -22,6 +24,51 @@ export default function LogFood() {
   const [fat, setFat] = useState('');
   const [servings, setServings] = useState('1');
 
+  const [results, setResults] = useState<FoodSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [basisNote, setBasisNote] = useState<string | null>(null);
+  const skipSearch = useRef(false);
+
+  // Live food lookup (debounced) as the user types the name.
+  useEffect(() => {
+    if (skipSearch.current) {
+      skipSearch.current = false;
+      return;
+    }
+    const q = name.trim();
+    if (q.length < 2) {
+      setResults([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const r = await searchFoods(q, ctrl.signal);
+        setResults(r);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 450);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [name]);
+
+  const select = (r: FoodSearchResult) => {
+    skipSearch.current = true;
+    setName(r.name);
+    setCalories(String(Math.round(r.nutrients.calories)));
+    setProtein(String(Math.round(r.nutrients.proteinG)));
+    setCarbs(String(Math.round(r.nutrients.carbsG)));
+    setFat(String(Math.round(r.nutrients.fatG)));
+    setBasisNote(r.basis === 'serving' ? `Per serving (${r.servingLabel})` : 'Per 100 g — adjust servings');
+    setResults([]);
+  };
+
   const canSave = name.trim().length > 0 && Number(calories) > 0;
 
   const save = () => {
@@ -36,7 +83,7 @@ export default function LogFood() {
         carbsG: Number(carbs) || 0,
         fatG: Number(fat) || 0,
       },
-      source: 'manual',
+      source: 'search',
     });
     router.back();
   };
@@ -48,8 +95,52 @@ export default function LogFood() {
         <Button label="Close" variant="ghost" onPress={() => router.back()} fullWidth={false} size="sm" />
       </View>
       <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
-        <Input label="Food name" placeholder="e.g. Chicken salad" value={name} onChangeText={setName} />
-        <Text variant="label" color="textMuted" style={{ marginBottom: 8 }}>
+        <Input
+          label="Food name"
+          placeholder="Type to search, e.g. Snickers bar"
+          value={name}
+          onChangeText={(t) => {
+            setName(t);
+            setBasisNote(null);
+          }}
+          hint="We'll auto-fill the nutrition — you can edit it after."
+        />
+
+        {searching ? (
+          <View style={styles.searchRow}>
+            <ActivityIndicator size="small" color={theme.colors.brand} />
+            <Text variant="caption" color="textMuted" style={{ marginLeft: 8 }}>
+              Searching foods…
+            </Text>
+          </View>
+        ) : null}
+
+        {results.length > 0 ? (
+          <View style={{ marginBottom: 8 }}>
+            {results.map((r) => (
+              <Card key={r.id} onPress={() => select(r)} style={{ marginBottom: 8 }}>
+                <View style={styles.row}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="label" numberOfLines={1}>
+                      {r.name}
+                    </Text>
+                    <Text variant="caption" color="textMuted">
+                      {Math.round(r.nutrients.calories)} kcal · P{Math.round(r.nutrients.proteinG)} · C
+                      {Math.round(r.nutrients.carbsG)} · F{Math.round(r.nutrients.fatG)} ·{' '}
+                      {r.basis === 'serving' ? r.servingLabel : 'per 100 g'}
+                    </Text>
+                  </View>
+                  <Ionicons name="add-circle" size={22} color={theme.colors.brand} />
+                </View>
+              </Card>
+            ))}
+            <Text variant="caption" color="textFaint" style={{ marginTop: 2 }}>
+              Nutrition data from Open Food Facts
+            </Text>
+          </View>
+        ) : null}
+
+        <Text variant="label" color="textMuted" style={{ marginBottom: 8, marginTop: 4 }}>
           Meal
         </Text>
         <View style={styles.chips}>
@@ -57,7 +148,13 @@ export default function LogFood() {
             <Chip key={s} label={s[0].toUpperCase() + s.slice(1)} selected={slot === s} onPress={() => setSlot(s)} />
           ))}
         </View>
+
         <View style={{ marginTop: 16 }}>
+          {basisNote ? (
+            <Text variant="caption" color="brand" style={{ marginBottom: 8 }}>
+              {basisNote}
+            </Text>
+          ) : null}
           <Input label="Calories" keyboardType="number-pad" value={calories} onChangeText={setCalories} suffix="kcal" />
           <View style={styles.row}>
             <View style={styles.col}>
@@ -83,7 +180,8 @@ export default function LogFood() {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  row: { flexDirection: 'row', gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center' },
   col: { flex: 1 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   footer: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth },
 });

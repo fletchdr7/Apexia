@@ -70,19 +70,19 @@ export default function Nutrition() {
         <Pressable style={[styles.action, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => router.push('/nutrition/scan')}>
           <Ionicons name="camera" size={22} color={theme.colors.calories} />
           <Text variant="caption" style={{ marginTop: 6 }}>
-            Scan plate
+            Scan food
           </Text>
-        </Pressable>
-        <Pressable style={[styles.action, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => router.push('/nutrition/scan')}>
-          <Ionicons name="barcode" size={22} color={theme.colors.protein} />
-          <Text variant="caption" style={{ marginTop: 6 }}>
-            Scan label
+          <Text variant="caption" color="textFaint">
+            plate or label
           </Text>
         </Pressable>
         <Pressable style={[styles.action, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => router.push('/nutrition/log-food')}>
-          <Ionicons name="create" size={22} color={theme.colors.fat} />
+          <Ionicons name="search" size={22} color={theme.colors.protein} />
           <Text variant="caption" style={{ marginTop: 6 }}>
-            Manual
+            Search / manual
+          </Text>
+          <Text variant="caption" color="textFaint">
+            type a food
           </Text>
         </Pressable>
       </View>
