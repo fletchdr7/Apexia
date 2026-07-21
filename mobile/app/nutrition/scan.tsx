@@ -19,7 +19,7 @@ type Mode = 'plate' | 'label';
 export default function ScanFood() {
   const theme = useTheme();
   const router = useRouter();
-  const { addFood } = useAppStore();
+  const { addFood, dateStamp } = useAppStore();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -60,7 +60,7 @@ export default function ScanFood() {
     addFood({
       name: result.name,
       slot,
-      loggedAt: new Date().toISOString(),
+      loggedAt: dateStamp(),
       servings: s,
       nutrients: result.total,
       source: mode === 'label' ? 'label_scan' : 'plate_scan',
@@ -197,7 +197,7 @@ export default function ScanFood() {
           </>
         ) : (
           <Card>
-            <Text variant="subtitle">Couldn't analyze that</Text>
+            <Text variant="subtitle">Could not analyze that</Text>
             <Text color="textMuted" style={{ marginTop: 6 }}>
               Try again with better lighting, or log it manually.
             </Text>
@@ -224,8 +224,12 @@ function Header({ title, onClose, light }: { title: string; onClose: () => void;
       <Text variant="heading" style={{ color }}>
         {title}
       </Text>
-      <Pressable onPress={onClose} hitSlop={10}>
-        <Ionicons name="close" size={28} color={color} />
+      <Pressable
+        onPress={onClose}
+        hitSlop={16}
+        style={[styles.closeBtn, { backgroundColor: light ? 'rgba(0,0,0,0.45)' : theme.colors.cardMuted }]}
+      >
+        <Ionicons name="close" size={24} color={color} />
       </Pressable>
     </View>
   );
@@ -276,8 +280,9 @@ function Centered({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   centered: { alignItems: 'center', justifyContent: 'center', padding: 24 },
-  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'space-between' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'space-between', zIndex: 10 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, zIndex: 20 },
+  closeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   modeSwitch: { flexDirection: 'row', alignSelf: 'center', gap: 8 },
   modePill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 },
   reticleWrap: { alignItems: 'center' },

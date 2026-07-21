@@ -2,16 +2,33 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type {
+  BodyAssessment,
+  BodyCompositionEntry,
+  BodyScanResult,
+  Equipment,
+  ExerciseRecord,
   FoodEntry,
+  FrequentFood,
   Supplement,
   SupplementLog,
   UserProfile,
+  WeightEntry,
   WorkoutEntry,
+  WorkoutLocation,
+  WorkoutPlan,
 } from '@/types';
-import { isSameDay } from '@/utils/date';
+import { dateKeyOf, stampForDate, todayKey } from '@/utils/date';
 import { uid } from '@/utils/id';
-import { addNutrients, emptyNutrients } from '@/utils/nutrition';
 import {
+  addNutrients,
+  ageFromBirthYear,
+  computeTargets,
+  doseServings,
+  emptyNutrients,
+  supplementNutrients,
+} from '@/utils/nutrition';
+import {
+  DEMO_BODY_COMPOSITION,
   DEMO_FOODS,
   DEMO_SUPPLEMENTS,
   DEMO_SUPPLEMENT_LOGS,
@@ -26,11 +43,57 @@ interface PersistedState {
   foods: FoodEntry[];
   supplements: Supplement[];
   supplementLogs: SupplementLog[];
+  /** Equipment the user scanned/added beyond the built-in catalog. */
+  customEquipment: Equipment[];
+  /** Ids (catalog or custom) of equipment available at the gym / at home. */
+  gymEquipmentIds: string[];
+  homeEquipmentIds: string[];
+  /** Per-exercise performance memory (keyed by lowercase name) for progression. */
+  exerciseHistory: Record<string, ExerciseRecord>;
+  /** Body-weight history for progress tracking. */
+  weightLogs: WeightEntry[];
+  /** Body-composition history (body fat %, lean mass, BMI) from a smart scale via Health. */
+  bodyCompositionLogs: BodyCompositionEntry[];
+  /** Saved AI physique assessments (photos are not stored, only the report). */
+  bodyScans: BodyAssessment[];
   seeded: boolean;
+  /** User chose to use the app without an account (local-only, no sync). */
+  guestMode: boolean;
+  /** Whether the user connected Apple Health on this device (device-local). */
+  healthEnabled: boolean;
 }
+
+/** The subset of state that is synced to the cloud (device flags excluded). */
+export type SyncableState = Pick<
+  PersistedState,
+  | 'profile'
+  | 'workouts'
+  | 'foods'
+  | 'supplements'
+  | 'supplementLogs'
+  | 'customEquipment'
+  | 'gymEquipmentIds'
+  | 'homeEquipmentIds'
+  | 'exerciseHistory'
+  | 'weightLogs'
+  | 'bodyCompositionLogs'
+  | 'bodyScans'
+>;
 
 interface AppStoreValue extends PersistedState {
   ready: boolean;
+  snapshot: SyncableState;
+  hydrate: (next: SyncableState) => void;
+  setGuestMode: (value: boolean) => void;
+  setHealthEnabled: (value: boolean) => void;
+  /** Transient plan being run in an active workout session (not persisted). */
+  activePlan: WorkoutPlan | null;
+  setActivePlan: (plan: WorkoutPlan | null) => void;
+  /** The day the app is focused on for viewing/logging (YYYY-MM-DD). */
+  selectedDate: string;
+  setSelectedDate: (dateKey: string) => void;
+  /** ISO timestamp on the selected day (current time), for new log entries. */
+  dateStamp: () => string;
   // profile
   setProfile: (profile: UserProfile) => void;
   updateProfile: (patch: Partial<UserProfile>) => void;
@@ -45,7 +108,24 @@ interface AppStoreValue extends PersistedState {
   addSupplement: (s: Omit<Supplement, 'id'>) => Supplement;
   removeSupplement: (id: string) => void;
   logSupplement: (supplement: Supplement, dose?: string) => void;
+  removeSupplementLog: (id: string) => void;
+  // weight
+  logWeight: (weightKg: number, dateKey?: string) => void;
+  removeWeightLog: (id: string) => void;
+  // body composition (smart scale)
+  logBodyComposition: (entry: Omit<BodyCompositionEntry, 'id'>) => void;
+  mergeBodyComposition: (entries: Omit<BodyCompositionEntry, 'id'>[]) => number;
+  // body scans
+  addBodyScan: (result: BodyScanResult) => void;
+  // equipment
+  addEquipment: (e: Omit<Equipment, 'id'>, location?: WorkoutLocation) => Equipment;
+  removeEquipment: (id: string) => void;
+  toggleEquipment: (id: string, location: WorkoutLocation) => void;
   // derived helpers
+  frequentFoods: (limit?: number) => FrequentFood[];
+  foodsForDate: (dateKey: string) => FoodEntry[];
+  workoutsForDate: (dateKey: string) => WorkoutEntry[];
+  nutritionForDate: (dateKey: string) => ReturnType<typeof emptyNutrients>;
   todaysFoods: () => FoodEntry[];
   todaysWorkouts: () => WorkoutEntry[];
   todaysNutrition: () => ReturnType<typeof emptyNutrients>;
@@ -57,21 +137,86 @@ const initialState: PersistedState = {
   foods: [],
   supplements: [],
   supplementLogs: [],
+  customEquipment: [],
+  gymEquipmentIds: [],
+  homeEquipmentIds: [],
+  exerciseHistory: {},
+  weightLogs: [],
+  bodyCompositionLogs: [],
+  bodyScans: [],
   seeded: false,
+  guestMode: false,
+  healthEnabled: false,
 };
+
+/** Backfill fields added in newer versions (and migrate the old equipment list). */
+function normalize(raw: Partial<PersistedState> & { selectedEquipmentIds?: string[] }): PersistedState {
+  const merged = { ...initialState, ...raw } as PersistedState;
+  if ((!raw.gymEquipmentIds || raw.gymEquipmentIds.length === 0) && raw.selectedEquipmentIds?.length) {
+    merged.gymEquipmentIds = raw.selectedEquipmentIds;
+  }
+  merged.gymEquipmentIds = merged.gymEquipmentIds ?? [];
+  merged.homeEquipmentIds = merged.homeEquipmentIds ?? [];
+  merged.customEquipment = merged.customEquipment ?? [];
+  merged.exerciseHistory = merged.exerciseHistory ?? {};
+  merged.weightLogs = merged.weightLogs ?? [];
+  merged.bodyCompositionLogs = merged.bodyCompositionLogs ?? [];
+  merged.bodyScans = merged.bodyScans ?? [];
+  return merged;
+}
+
+/** Most recent defined value of each metric across (descending) logs. */
+function latestCompositionSnapshot(logs: BodyCompositionEntry[]): UserProfile['bodyComposition'] | undefined {
+  if (logs.length === 0) return undefined;
+  let bodyFatPct: number | undefined;
+  let leanMassKg: number | undefined;
+  let bmi: number | undefined;
+  for (const e of logs) {
+    if (bodyFatPct == null && e.bodyFatPct != null) bodyFatPct = e.bodyFatPct;
+    if (leanMassKg == null && e.leanMassKg != null) leanMassKg = e.leanMassKg;
+    if (bmi == null && e.bmi != null) bmi = e.bmi;
+  }
+  if (bodyFatPct == null && leanMassKg == null && bmi == null) return undefined;
+  return { bodyFatPct, leanMassKg, bmi, updatedAt: logs[0].loggedAt };
+}
+
+/** Merge incoming body-composition readings into state (one entry per day, latest wins). */
+function applyComposition(s: PersistedState, incoming: Omit<BodyCompositionEntry, 'id'>[]): PersistedState {
+  const byDay = new Map<string, BodyCompositionEntry>();
+  for (const e of s.bodyCompositionLogs) byDay.set(dateKeyOf(e.loggedAt), e);
+  for (const e of incoming) {
+    const key = dateKeyOf(e.loggedAt);
+    const base = byDay.get(key) ?? { id: uid('bc_'), loggedAt: e.loggedAt };
+    byDay.set(key, {
+      ...base,
+      loggedAt: e.loggedAt ?? base.loggedAt,
+      weightKg: e.weightKg ?? base.weightKg,
+      bodyFatPct: e.bodyFatPct ?? base.bodyFatPct,
+      leanMassKg: e.leanMassKg ?? base.leanMassKg,
+      bmi: e.bmi ?? base.bmi,
+    });
+  }
+  const bodyCompositionLogs = Array.from(byDay.values()).sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
+  const snapshot = latestCompositionSnapshot(bodyCompositionLogs);
+  const profile = s.profile && snapshot ? { ...s.profile, bodyComposition: snapshot } : s.profile;
+  return { ...s, bodyCompositionLogs, profile };
+}
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedState>(initialState);
   const [ready, setReady] = useState(false);
+  const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(() => todayKey());
+  const dateStamp = useCallback(() => stampForDate(selectedDate), [selectedDate]);
 
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          setState({ ...initialState, ...(JSON.parse(raw) as PersistedState) });
+          setState(normalize(JSON.parse(raw)));
         }
       } catch {
         // ignore corrupt storage; start fresh
@@ -88,20 +233,25 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const setProfile = useCallback((profile: UserProfile) => {
     setState((s) => {
+      const weightLogs = s.weightLogs.length
+        ? s.weightLogs
+        : [{ id: uid('wt_'), loggedAt: new Date().toISOString(), weightKg: profile.weightKg }];
       // Seed sample activity the first time a profile is created so the app
       // never looks empty during first exploration.
       if (!s.seeded) {
         return {
           ...s,
-          profile,
+          profile: { ...profile, bodyComposition: latestCompositionSnapshot(DEMO_BODY_COMPOSITION) },
+          weightLogs,
           workouts: DEMO_WORKOUTS,
           foods: DEMO_FOODS,
           supplements: DEMO_SUPPLEMENTS,
           supplementLogs: DEMO_SUPPLEMENT_LOGS,
+          bodyCompositionLogs: DEMO_BODY_COMPOSITION,
           seeded: true,
         };
       }
-      return { ...s, profile };
+      return { ...s, profile, weightLogs };
     });
   }, []);
 
@@ -114,9 +264,47 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     AsyncStorage.removeItem(STORAGE_KEY).catch(() => undefined);
   }, []);
 
+  // Replace the synced portion of state (used when loading cloud data on sign-in).
+  const hydrate = useCallback((next: SyncableState) => {
+    setState((s) => normalize({ ...s, ...next, seeded: true }));
+  }, []);
+
+  const setGuestMode = useCallback((guestMode: boolean) => {
+    setState((s) => ({ ...s, guestMode }));
+  }, []);
+
+  const setHealthEnabled = useCallback((healthEnabled: boolean) => {
+    setState((s) => ({ ...s, healthEnabled }));
+  }, []);
+
   const addWorkout = useCallback((w: Omit<WorkoutEntry, 'id'>) => {
     const entry: WorkoutEntry = { ...w, id: uid('w_') };
-    setState((s) => ({ ...s, workouts: [entry, ...s.workouts] }));
+    setState((s) => {
+      const history = { ...s.exerciseHistory };
+      for (const ex of entry.exercises ?? []) {
+        if (!ex.sets || ex.sets.length === 0) continue;
+        // Pick the "top" set: heaviest, then most reps.
+        const top = ex.sets.reduce((best, st) => {
+          const w1 = st.weightKg ?? 0;
+          const w0 = best.weightKg ?? 0;
+          if (w1 > w0) return st;
+          if (w1 === w0 && st.reps > best.reps) return st;
+          return best;
+        }, ex.sets[0]);
+        const key = ex.name.trim().toLowerCase();
+        const prev = history[key];
+        const best = Math.max(prev?.bestWeightKg ?? 0, top.weightKg ?? 0);
+        history[key] = {
+          name: ex.name,
+          lastWeightKg: top.weightKg,
+          lastReps: top.reps,
+          bestWeightKg: best > 0 ? best : undefined,
+          sessions: (prev?.sessions ?? 0) + 1,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return { ...s, workouts: [entry, ...s.workouts], exerciseHistory: history };
+    });
     return entry;
   }, []);
 
@@ -144,30 +332,204 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, supplements: s.supplements.filter((x) => x.id !== id) }));
   }, []);
 
-  const logSupplement = useCallback((supplement: Supplement, dose?: string) => {
-    const log: SupplementLog = {
-      id: uid('sl_'),
-      supplementId: supplement.id,
-      supplementName: supplement.name,
-      takenAt: new Date().toISOString(),
-      dose: dose ?? supplement.servingSize ?? '1 serving',
-    };
-    setState((s) => ({ ...s, supplementLogs: [log, ...s.supplementLogs] }));
+  const logSupplement = useCallback(
+    (supplement: Supplement, dose?: string) => {
+      const log: SupplementLog = {
+        id: uid('sl_'),
+        supplementId: supplement.id,
+        supplementName: supplement.name,
+        takenAt: stampForDate(selectedDate),
+        dose: dose ?? supplement.servingSize ?? '1 serving',
+      };
+      setState((s) => ({ ...s, supplementLogs: [log, ...s.supplementLogs] }));
+    },
+    [selectedDate],
+  );
+
+  const removeSupplementLog = useCallback((id: string) => {
+    setState((s) => ({ ...s, supplementLogs: s.supplementLogs.filter((l) => l.id !== id) }));
   }, []);
 
-  const todaysFoods = useCallback(() => state.foods.filter((f) => isSameDay(f.loggedAt)), [state.foods]);
-  const todaysWorkouts = useCallback(
-    () => state.workouts.filter((w) => isSameDay(w.performedAt)),
+  const logWeight = useCallback((weightKg: number, dateKey?: string) => {
+    setState((s) => {
+      const key = dateKey ?? todayKey();
+      const loggedAt = stampForDate(key);
+      // One entry per day: replace any existing entry on that day.
+      const others = s.weightLogs.filter((w) => dateKeyOf(w.loggedAt) !== key);
+      const entry: WeightEntry = { id: uid('wt_'), loggedAt, weightKg };
+      const weightLogs = [entry, ...others].sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
+      // Keep current weight + nutrition targets in sync with the latest entry.
+      let profile = s.profile;
+      if (profile) {
+        const latest = weightLogs[0]?.weightKg ?? weightKg;
+        const targets = computeTargets({
+          sex: profile.sex,
+          weightKg: latest,
+          heightCm: profile.heightCm,
+          age: ageFromBirthYear(profile.birthYear),
+          activityLevel: profile.activityLevel,
+          goal: profile.goal,
+        });
+        profile = { ...profile, weightKg: latest, targets };
+      }
+      return { ...s, weightLogs, profile };
+    });
+  }, []);
+
+  const removeWeightLog = useCallback((id: string) => {
+    setState((s) => ({ ...s, weightLogs: s.weightLogs.filter((w) => w.id !== id) }));
+  }, []);
+
+  const logBodyComposition = useCallback((entry: Omit<BodyCompositionEntry, 'id'>) => {
+    setState((s) => applyComposition(s, [entry]));
+  }, []);
+
+  const mergeBodyComposition = useCallback((entries: Omit<BodyCompositionEntry, 'id'>[]) => {
+    const distinctDays = new Set(entries.map((e) => dateKeyOf(e.loggedAt))).size;
+    setState((s) => applyComposition(s, entries));
+    return distinctDays;
+  }, []);
+
+  const addBodyScan = useCallback((result: BodyScanResult) => {
+    const entry: BodyAssessment = { id: uid('bs_'), createdAt: new Date().toISOString(), result };
+    setState((s) => ({ ...s, bodyScans: [entry, ...s.bodyScans] }));
+  }, []);
+
+  const addEquipment = useCallback((e: Omit<Equipment, 'id'>, location: WorkoutLocation = 'gym') => {
+    const entry: Equipment = { ...e, id: uid('eq_') };
+    setState((s) => ({
+      ...s,
+      customEquipment: [entry, ...s.customEquipment],
+      gymEquipmentIds: location === 'gym' ? [...s.gymEquipmentIds, entry.id] : s.gymEquipmentIds,
+      homeEquipmentIds: location === 'home' ? [...s.homeEquipmentIds, entry.id] : s.homeEquipmentIds,
+    }));
+    return entry;
+  }, []);
+
+  const removeEquipment = useCallback((id: string) => {
+    setState((s) => ({
+      ...s,
+      customEquipment: s.customEquipment.filter((x) => x.id !== id),
+      gymEquipmentIds: s.gymEquipmentIds.filter((x) => x !== id),
+      homeEquipmentIds: s.homeEquipmentIds.filter((x) => x !== id),
+    }));
+  }, []);
+
+  const toggleEquipment = useCallback((id: string, location: WorkoutLocation) => {
+    setState((s) => {
+      const key = location === 'home' ? 'homeEquipmentIds' : 'gymEquipmentIds';
+      const list = s[key];
+      const nextList = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+      return { ...s, [key]: nextList };
+    });
+  }, []);
+
+  const frequentFoods = useCallback(
+    (limit = 6): FrequentFood[] => {
+      const groups = new Map<string, { template: FoodEntry; count: number; lastAt: string }>();
+      for (const f of state.foods) {
+        const key = f.name.trim().toLowerCase();
+        if (!key) continue;
+        const g = groups.get(key);
+        if (!g) {
+          groups.set(key, { template: f, count: 1, lastAt: f.loggedAt });
+        } else {
+          g.count += 1;
+          if (f.loggedAt > g.lastAt) {
+            g.lastAt = f.loggedAt;
+            g.template = f; // most recent logging becomes the quick-add template
+          }
+        }
+      }
+      return Array.from(groups.entries())
+        .sort((a, b) => b[1].count - a[1].count || b[1].lastAt.localeCompare(a[1].lastAt))
+        .slice(0, limit)
+        .map(([key, g]) => ({
+          key,
+          name: g.template.name,
+          slot: g.template.slot,
+          servings: g.template.servings,
+          nutrients: g.template.nutrients,
+          source: g.template.source,
+          count: g.count,
+        }));
+    },
+    [state.foods],
+  );
+
+  const foodsForDate = useCallback(
+    (dateKey: string) => state.foods.filter((f) => dateKeyOf(f.loggedAt) === dateKey),
+    [state.foods],
+  );
+  const workoutsForDate = useCallback(
+    (dateKey: string) => state.workouts.filter((w) => dateKeyOf(w.performedAt) === dateKey),
     [state.workouts],
   );
-  const todaysNutrition = useCallback(() => {
-    return todaysFoods().reduce((acc, f) => addNutrients(acc, f.nutrients, f.servings), emptyNutrients());
-  }, [todaysFoods]);
+  const nutritionForDate = useCallback(
+    (dateKey: string) => {
+      const fromFood = foodsForDate(dateKey).reduce(
+        (acc, f) => addNutrients(acc, f.nutrients, f.servings),
+        emptyNutrients(),
+      );
+      const suppById = new Map(state.supplements.map((s) => [s.id, s]));
+      return state.supplementLogs
+        .filter((l) => dateKeyOf(l.takenAt) === dateKey)
+        .reduce((acc, l) => {
+          const sup = suppById.get(l.supplementId);
+          if (!sup) return acc;
+          return addNutrients(acc, supplementNutrients(sup), doseServings(l.dose));
+        }, fromFood);
+    },
+    [foodsForDate, state.supplements, state.supplementLogs],
+  );
+  const todaysFoods = useCallback(() => foodsForDate(todayKey()), [foodsForDate]);
+  const todaysWorkouts = useCallback(() => workoutsForDate(todayKey()), [workoutsForDate]);
+  const todaysNutrition = useCallback(() => nutritionForDate(todayKey()), [nutritionForDate]);
+
+  const snapshot = useMemo<SyncableState>(
+    () => ({
+      profile: state.profile,
+      workouts: state.workouts,
+      foods: state.foods,
+      supplements: state.supplements,
+      supplementLogs: state.supplementLogs,
+      customEquipment: state.customEquipment,
+      gymEquipmentIds: state.gymEquipmentIds,
+      homeEquipmentIds: state.homeEquipmentIds,
+      exerciseHistory: state.exerciseHistory,
+      weightLogs: state.weightLogs,
+      bodyCompositionLogs: state.bodyCompositionLogs,
+      bodyScans: state.bodyScans,
+    }),
+    [
+      state.profile,
+      state.workouts,
+      state.foods,
+      state.supplements,
+      state.supplementLogs,
+      state.customEquipment,
+      state.gymEquipmentIds,
+      state.homeEquipmentIds,
+      state.exerciseHistory,
+      state.weightLogs,
+      state.bodyCompositionLogs,
+      state.bodyScans,
+    ],
+  );
 
   const value = useMemo<AppStoreValue>(
     () => ({
       ...state,
       ready,
+      snapshot,
+      hydrate,
+      setGuestMode,
+      setHealthEnabled,
+      activePlan,
+      setActivePlan,
+      selectedDate,
+      setSelectedDate,
+      dateStamp,
       setProfile,
       updateProfile,
       resetAll,
@@ -178,6 +540,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addSupplement,
       removeSupplement,
       logSupplement,
+      removeSupplementLog,
+      logWeight,
+      removeWeightLog,
+      logBodyComposition,
+      mergeBodyComposition,
+      addBodyScan,
+      addEquipment,
+      removeEquipment,
+      toggleEquipment,
+      frequentFoods,
+      foodsForDate,
+      workoutsForDate,
+      nutritionForDate,
       todaysFoods,
       todaysWorkouts,
       todaysNutrition,
@@ -185,6 +560,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [
       state,
       ready,
+      snapshot,
+      hydrate,
+      setGuestMode,
+      setHealthEnabled,
+      activePlan,
+      selectedDate,
+      dateStamp,
       setProfile,
       updateProfile,
       resetAll,
@@ -195,6 +577,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       addSupplement,
       removeSupplement,
       logSupplement,
+      removeSupplementLog,
+      logWeight,
+      removeWeightLog,
+      logBodyComposition,
+      mergeBodyComposition,
+      addBodyScan,
+      addEquipment,
+      removeEquipment,
+      toggleEquipment,
+      frequentFoods,
+      foodsForDate,
+      workoutsForDate,
+      nutritionForDate,
       todaysFoods,
       todaysWorkouts,
       todaysNutrition,

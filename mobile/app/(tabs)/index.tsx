@@ -3,31 +3,50 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Card, MacroBar, ProgressRing, Screen, SectionHeader, Text } from '@/components';
+import { Card, MacroBar, ProgressRing, Screen, SectionHeader, StatTile, Text } from '@/components';
 import { ACTIVITIES } from '@/constants/activities';
 import { generateDailyPlan } from '@/lib/api';
+import { getTodayHealth, type HealthSnapshot } from '@/lib/health';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { CoachPlan, DailyPlanItem } from '@/types';
 import { greeting, relativeDay, timeLabel } from '@/utils/date';
 import { clampPct } from '@/utils/nutrition';
+import { kgToDisplay, unitLabel } from '@/utils/units';
 
 export default function Dashboard() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, todaysNutrition, todaysWorkouts, workouts } = useAppStore();
+  const { profile, todaysNutrition, todaysWorkouts, workouts, healthEnabled, weightLogs } = useAppStore();
   const [plan, setPlan] = useState<CoachPlan | null>(null);
   const [doneItems, setDoneItems] = useState<Record<string, boolean>>({});
+  const [health, setHealth] = useState<HealthSnapshot | null>(null);
 
   useEffect(() => {
     generateDailyPlan(profile).then(setPlan).catch(() => undefined);
   }, [profile]);
+
+  useEffect(() => {
+    if (healthEnabled) getTodayHealth().then(setHealth).catch(() => undefined);
+  }, [healthEnabled]);
 
   const nutrition = todaysNutrition();
   const targets = profile?.targets;
   const calPct = targets ? clampPct(nutrition.calories / targets.calories) : 0;
   const remaining = targets ? Math.max(0, Math.round(targets.calories - nutrition.calories)) : 0;
   const workoutsToday = todaysWorkouts();
+
+  const units = profile?.units ?? 'imperial';
+  const wSorted = [...weightLogs].sort((a, b) => a.loggedAt.localeCompare(b.loggedAt));
+  const wStart = wSorted[0]?.weightKg;
+  const wCurrent = wSorted[wSorted.length - 1]?.weightKg ?? profile?.weightKg;
+  const wTarget = profile?.targetWeightKg;
+  const wChange = wStart != null && wCurrent != null ? wCurrent - wStart : 0;
+  const wPct =
+    wTarget != null && wStart != null && wCurrent != null && wStart !== wTarget
+      ? Math.max(0, Math.min(1, (wStart - wCurrent) / (wStart - wTarget)))
+      : null;
+  const showProgress = wTarget != null && wSorted.length > 0;
 
   return (
     <Screen>
@@ -75,6 +94,59 @@ export default function Dashboard() {
         <QuickAction icon="flask" label="Supplement" tint={theme.colors.fat} onPress={() => router.push('/supplements')} />
         <QuickAction icon="sparkles" label="Ask coach" tint={theme.colors.warning} onPress={() => router.push('/(tabs)/coach')} />
       </View>
+
+      {/* Weight progress */}
+      {showProgress ? (
+        <>
+          <SectionHeader title="Progress" actionLabel="Details" onAction={() => router.push('/progress')} />
+          <Card onPress={() => router.push('/progress')}>
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text variant="title">
+                  {kgToDisplay(wCurrent ?? 0, units)} <Text variant="caption" color="textMuted">{unitLabel(units)}</Text>
+                </Text>
+                <Text variant="caption" color="textMuted">
+                  {wChange > 0 ? '+' : ''}
+                  {kgToDisplay(wChange, units)} {unitLabel(units)} since start · goal {kgToDisplay(wTarget ?? 0, units)}{' '}
+                  {unitLabel(units)}
+                </Text>
+              </View>
+              {wPct != null ? (
+                <Text variant="subtitle" color="brand">
+                  {Math.round(wPct * 100)}%
+                </Text>
+              ) : null}
+            </View>
+            {wPct != null ? (
+              <View style={[styles.progressTrack, { backgroundColor: theme.colors.cardMuted }]}>
+                <View style={[styles.progressFill, { width: `${wPct * 100}%`, backgroundColor: theme.colors.brand }]} />
+              </View>
+            ) : null}
+          </Card>
+        </>
+      ) : null}
+
+      {/* Apple Health */}
+      {healthEnabled && health && (health.steps != null || health.activeEnergyKcal != null) ? (
+        <>
+          <SectionHeader title="Apple Health" />
+          <View style={{ flexDirection: 'row' }}>
+            <StatTile
+              icon="footsteps"
+              label="Steps"
+              value={health.steps != null ? health.steps.toLocaleString() : '—'}
+              tint={theme.colors.info}
+            />
+            <View style={{ width: 12 }} />
+            <StatTile
+              icon="flame"
+              label="Active kcal"
+              value={health.activeEnergyKcal != null ? String(health.activeEnergyKcal) : '—'}
+              tint={theme.colors.fat}
+            />
+          </View>
+        </>
+      ) : null}
 
       {/* Today's plan */}
       <SectionHeader title="Today's plan" actionLabel="Refresh" onAction={() => generateDailyPlan(profile).then(setPlan)} />
@@ -177,7 +249,6 @@ function QuickAction({
   tint: string;
   onPress: () => void;
 }) {
-  const theme = useTheme();
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.quickItem, { opacity: pressed ? 0.8 : 1 }]}>
       <View style={[styles.quickIcon, { backgroundColor: tint + '22' }]}>
@@ -246,4 +317,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
   miniIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   recentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  progressTrack: { height: 8, borderRadius: 999, marginTop: 12, overflow: 'hidden' },
+  progressFill: { height: 8, borderRadius: 999 },
 });

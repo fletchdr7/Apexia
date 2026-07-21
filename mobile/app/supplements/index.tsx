@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, EmptyState, SectionHeader, Text } from '@/components';
@@ -32,7 +32,17 @@ export default function Supplements() {
         <Text variant="heading" style={{ flex: 1 }}>
           Supplements
         </Text>
-        <Button label="Analyze" icon="camera" onPress={() => router.push('/supplements/analyze')} fullWidth={false} size="sm" />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Button
+            label="Add"
+            icon="add"
+            variant="secondary"
+            onPress={() => router.push({ pathname: '/supplements/analyze', params: { mode: 'manual' } })}
+            fullWidth={false}
+            size="sm"
+          />
+          <Button label="Scan" icon="camera" onPress={() => router.push('/supplements/analyze')} fullWidth={false} size="sm" />
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
@@ -99,7 +109,16 @@ export default function Supplements() {
                 </View>
                 <View style={styles.actionsRow}>
                   <Button label="Log dose" icon="add" size="sm" onPress={() => logSupplement(s)} fullWidth={false} />
-                  <Pressable onPress={() => removeSupplement(s.id)} hitSlop={8} style={{ marginLeft: 12 }}>
+                  <Pressable
+                    onPress={() =>
+                      Alert.alert('Remove supplement', `Remove ${s.name} from your stack?`, [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Remove', style: 'destructive', onPress: () => removeSupplement(s.id) },
+                      ])
+                    }
+                    hitSlop={8}
+                    style={{ marginLeft: 12 }}
+                  >
                     <Ionicons name="trash-outline" size={18} color={theme.colors.textFaint} />
                   </Pressable>
                 </View>

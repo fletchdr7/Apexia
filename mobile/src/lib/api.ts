@@ -1,13 +1,22 @@
 import type {
+  BodyScanResult,
   ChatMessage,
   CoachPlan,
+  EquipmentScanResult,
   FoodScanResult,
+  Nutrients,
+  PlannedExercise,
   Supplement,
   UserProfile,
+  WorkoutLocation,
+  WorkoutPlan,
 } from '@/types';
+import type { FoodSearchResult } from '@/lib/foodSearch';
 import { COMMON_SUPPLEMENTS, GOAL_SUPPLEMENT_HINTS } from '@/constants/supplements';
+import { selectLibraryExercises, swapCandidates, type ExerciseMedia } from '@/lib/exerciseMedia';
 import { uid } from '@/utils/id';
 import { goalLabel } from '@/utils/nutrition';
+import { estimateWeightKg, repSchemeForGoal, type RepScheme } from '@/utils/strength';
 import { config } from './config';
 import { supabase } from './supabase';
 
@@ -83,6 +92,25 @@ function mockFoodScan(mode: 'label' | 'plate'): FoodScanResult {
   };
 }
 
+/** AI nutrition estimate for a typed food (fallback when Open Food Facts misses). */
+export async function estimateFood(name: string): Promise<FoodSearchResult> {
+  const clean = name.trim();
+  if (config.hasAiBackend) {
+    const r = await post<{ name: string; servingLabel: string; nutrients: Nutrients; confidence: number }>(
+      '/coach/food-lookup',
+      { name: clean },
+    );
+    return { id: `ai:${clean}`, name: r.name || clean, nutrients: r.nutrients, basis: 'serving', servingLabel: r.servingLabel || '1 serving' };
+  }
+  return {
+    id: `ai:${clean}`,
+    name: clean,
+    nutrients: { calories: 200, proteinG: 8, carbsG: 25, fatG: 8 },
+    basis: 'serving',
+    servingLabel: '1 serving',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Supplement analysis
 // ---------------------------------------------------------------------------
@@ -91,8 +119,118 @@ export async function analyzeSupplementPhoto(imageBase64: string): Promise<Omit<
   if (config.hasAiBackend) {
     return post<Omit<Supplement, 'id'>>('/vision/supplement', { image: imageBase64 });
   }
-  const sample = COMMON_SUPPLEMENTS[0];
-  return { ...sample, name: sample.name };
+  return { name: 'Unknown supplement', form: 'capsule', ingredients: [] };
+}
+
+/** Look up a supplement's details by name (like the food search, AI-backed). */
+export async function lookupSupplement(name: string): Promise<Omit<Supplement, 'id'>> {
+  const clean = name.trim();
+  if (config.hasAiBackend) {
+    return post<Omit<Supplement, 'id'>>('/coach/supplement-lookup', { name: clean });
+  }
+  const q = clean.toLowerCase();
+  const found = COMMON_SUPPLEMENTS.find(
+    (s) => s.name.toLowerCase().includes(q) || (q && q.includes(s.name.toLowerCase().split(' ')[0])),
+  );
+  if (found) return { ...found };
+  return { name: clean || 'Unknown supplement', form: 'capsule', ingredients: [] };
+}
+
+// ---------------------------------------------------------------------------
+// Equipment vision
+// ---------------------------------------------------------------------------
+
+export async function analyzeEquipmentPhoto(imageBase64: string): Promise<EquipmentScanResult> {
+  if (config.hasAiBackend) {
+    return post<EquipmentScanResult>('/vision/equipment', { image: imageBase64 });
+  }
+  return {
+    name: 'Unrecognized equipment',
+    category: 'machine',
+    primaryMuscles: [],
+    description: 'Connect the AI backend to identify gym equipment from a photo.',
+    exampleExercises: [],
+    confidence: 0.4,
+    notes: 'Demo mode — connect the AI backend for real equipment recognition.',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Workout plan builder
+// ---------------------------------------------------------------------------
+
+export interface WorkoutPlanParams {
+  profile: UserProfile | null;
+  location: WorkoutLocation;
+  durationMin: number;
+  muscleGroups: string[];
+  /** Equipment tags the user has, in exercise-library terms (e.g. 'barbell'). */
+  availableEquipment: string[];
+}
+
+function cap(s: string): string {
+  return s.length ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+function toPlanned(lib: ExerciseMedia, profile: UserProfile | null, scheme: RepScheme): PlannedExercise {
+  const bodyweight = profile?.weightKg ?? 75;
+  const experience = profile?.experience ?? 'beginner';
+  const sexFactor = profile?.sex === 'female' ? 0.7 : 1;
+  const isBody = !lib.equipment || lib.equipment === 'body only';
+  const kg = isBody ? undefined : estimateWeightKg(lib.name, bodyweight, experience, sexFactor);
+  return {
+    name: lib.name,
+    equipment: lib.equipment ?? undefined,
+    sets: scheme.sets,
+    reps: scheme.reps,
+    restSec: scheme.restSec,
+    muscles: lib.primaryMuscles,
+    suggestedWeight: isBody ? 'bodyweight' : kg ? `~${kg} kg` : 'moderate',
+  };
+}
+
+/** Convert a library exercise into a planned exercise for the user's goal. */
+export function plannedFromMedia(media: ExerciseMedia, profile: UserProfile | null): PlannedExercise {
+  return toPlanned(media, profile, repSchemeForGoal(profile?.goal ?? 'maintain'));
+}
+
+/**
+ * Builds the plan directly from the bundled exercise library so every suggested
+ * exercise is a real entry with a matching demo, muscles, and instructions.
+ */
+export async function generateWorkoutPlan(params: WorkoutPlanParams): Promise<WorkoutPlan> {
+  const scheme = repSchemeForGoal(params.profile?.goal ?? 'maintain');
+  const slots = Math.max(3, Math.min(8, Math.floor((params.durationMin - 10) / 7)));
+  const available = new Set(params.availableEquipment);
+  const libs = selectLibraryExercises(params.muscleGroups, available, slots);
+  const exercises = libs.map((l) => toPlanned(l, params.profile, scheme));
+  const focusGroups = params.muscleGroups.filter((m) => m !== 'full_body');
+  const focus = focusGroups.length ? focusGroups.map(cap).join(' & ') : 'Full body';
+  return {
+    title: `${params.location === 'home' ? 'Home' : 'Gym'} · ${focus}`,
+    focus,
+    location: params.location,
+    durationMin: params.durationMin,
+    warmup: ['5 min easy cardio', 'Dynamic stretches for the muscles you\u2019ll train'],
+    exercises,
+    cooldown: ['3\u20135 min easy walk', 'Stretch the muscles you trained'],
+    notes: 'Tap an exercise for a demo. Adjust weights so the last 1\u20132 reps are challenging.',
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+export interface SwapExerciseParams {
+  profile: UserProfile | null;
+  exercise: string;
+  muscles: string[];
+  availableEquipment: string[];
+}
+
+/** Alternative library exercises for the same muscle(s) — always demo-backed. */
+export async function swapExercise(params: SwapExerciseParams): Promise<PlannedExercise[]> {
+  const scheme = repSchemeForGoal(params.profile?.goal ?? 'maintain');
+  const cands = swapCandidates(params.muscles, new Set(params.availableEquipment), params.exercise, 6);
+  return cands.map((l) => toPlanned(l, params.profile, scheme));
 }
 
 export function analyzeSupplementForGoal(
@@ -107,6 +245,54 @@ export function analyzeSupplementForGoal(
     ? `Strong fit for your goal to ${goalLabel(goal).toLowerCase()}.`
     : `Reasonable general-health choice, but not a top priority for ${goalLabel(goal).toLowerCase()}.`;
   return { goalFit, verdict };
+}
+
+// ---------------------------------------------------------------------------
+// Body scan (physique assessment)
+// ---------------------------------------------------------------------------
+
+export interface BodyScanContext {
+  weight?: { startKg?: number; currentKg?: number; targetKg?: number; changeKg?: number };
+  topLifts?: { name: string; bestKg?: number; sessions: number }[];
+  workoutsLast30?: number;
+  nutritionAvg?: { calories: number; proteinG: number } | null;
+  equipment?: string[];
+}
+
+export async function analyzeBodyScan(params: {
+  images: string[];
+  profile: UserProfile | null;
+  context: BodyScanContext;
+}): Promise<BodyScanResult> {
+  if (config.hasAiBackend) {
+    return post<BodyScanResult>('/coach/body-scan', {
+      images: params.images,
+      profile: params.profile,
+      context: params.context,
+    });
+  }
+  return localBodyScan(params.profile);
+}
+
+function localBodyScan(profile: UserProfile | null): BodyScanResult {
+  const goal = profile?.goal ?? 'maintain';
+  return {
+    summary: `A personalized plan focused on ${goalLabel(goal).toLowerCase()}, built from your logged data.`,
+    estimatedComposition: 'Connect the AI backend for a photo-based visual assessment.',
+    focusAreas: [
+      { area: 'Consistency', observation: 'Habits drive change.', action: 'Hit your weekly workout and protein targets most days.' },
+      { area: 'Progressive overload', observation: 'Strength builds physique.', action: 'Add reps or a little weight on key lifts each week.' },
+    ],
+    training: ['Train each muscle group ~2x/week', 'Prioritize compound lifts, add isolation for lagging areas'],
+    nutrition: [
+      profile?.targets ? `Hit ~${profile.targets.proteinG}g protein daily` : 'Keep protein high and consistent',
+      'Favor whole foods; keep calories aligned with your goal',
+    ],
+    milestones: ['4 workouts/week for a month', 'Add a little weight to a main lift', 'Stay in calorie range 5 days/week'],
+    encouragement: "You've got the data and the tools — small steps compound fast.",
+    disclaimer: 'General guidance only, not medical advice.',
+    confidence: 0.5,
+  };
 }
 
 // ---------------------------------------------------------------------------

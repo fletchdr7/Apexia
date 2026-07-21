@@ -4,6 +4,10 @@ export type GoalType = 'lose_fat' | 'build_muscle' | 'recomp' | 'maintain' | 'en
 
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'athlete';
 
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+
+export type WorkoutLocation = 'home' | 'gym';
+
 export type UnitSystem = 'metric' | 'imperial';
 
 export type LifestyleTag =
@@ -24,6 +28,7 @@ export interface UserProfile {
   weightKg: number;
   targetWeightKg?: number;
   activityLevel: ActivityLevel;
+  experience?: ExperienceLevel;
   goal: GoalType;
   weeklyWorkoutTarget: number;
   preferredActivities: WorkoutType[];
@@ -31,8 +36,30 @@ export interface UserProfile {
   dietaryPreferences: string[];
   units: UnitSystem;
   onboardedAt?: string;
+  /** Selected AI coach avatar id (see constants/avatars). */
+  coachAvatarId?: string;
+  /** Latest body composition (e.g. imported from a smart scale via Apple Health). */
+  bodyComposition?: { bodyFatPct?: number; leanMassKg?: number; bmi?: number; updatedAt?: string };
+  /** Optional strength target for one lift (e.g. bench press to 100 kg). */
+  strengthGoal?: { exercise: string; targetKg: number };
   // Derived nutrition targets
   targets: NutritionTargets;
+}
+
+export interface WeightEntry {
+  id: string;
+  loggedAt: string; // ISO
+  weightKg: number;
+}
+
+/** A body-composition reading (e.g. from a smart scale via Apple Health). */
+export interface BodyCompositionEntry {
+  id: string;
+  loggedAt: string; // ISO
+  weightKg?: number;
+  bodyFatPct?: number;
+  leanMassKg?: number;
+  bmi?: number;
 }
 
 export interface NutritionTargets {
@@ -106,6 +133,17 @@ export interface FoodEntry {
   confidence?: number; // 0..1 for AI estimates
 }
 
+/** A frequently-logged food, derived from history, for one-tap re-logging. */
+export interface FrequentFood {
+  key: string;
+  name: string;
+  slot: MealSlot;
+  servings: number;
+  nutrients: Nutrients;
+  source: FoodEntry['source'];
+  count: number;
+}
+
 export type SupplementForm = 'capsule' | 'tablet' | 'powder' | 'liquid' | 'gummy' | 'softgel';
 
 export interface SupplementIngredient {
@@ -122,6 +160,8 @@ export interface Supplement {
   form: SupplementForm;
   servingSize?: string;
   ingredients: SupplementIngredient[];
+  /** Macros contributed per serving (e.g. protein powder). Optional — many supplements have none. */
+  nutrients?: Nutrients;
   // AI analysis
   purpose?: string;
   benefits?: string[];
@@ -136,6 +176,94 @@ export interface SupplementLog {
   supplementName: string;
   takenAt: string; // ISO
   dose: string;
+}
+
+export type EquipmentCategory =
+  | 'free_weights'
+  | 'machine'
+  | 'cable'
+  | 'cardio'
+  | 'bodyweight'
+  | 'accessory'
+  | 'other';
+
+export interface Equipment {
+  id: string;
+  name: string;
+  category: EquipmentCategory;
+  primaryMuscles: string[];
+  description?: string;
+  exampleExercises?: string[];
+  howToUse?: string;
+  source: 'catalog' | 'scan' | 'manual';
+}
+
+export interface ExerciseRecord {
+  name: string;
+  lastWeightKg?: number;
+  lastReps?: number;
+  bestWeightKg?: number;
+  sessions: number;
+  updatedAt: string;
+}
+
+export interface PlannedExercise {
+  name: string;
+  equipment?: string;
+  sets: number;
+  reps: string; // e.g. "8-12" or "12" or "30s"
+  suggestedWeight?: string; // e.g. "20 kg", "bodyweight", "moderate"
+  restSec?: number;
+  muscles?: string[];
+  notes?: string;
+}
+
+export interface WorkoutPlan {
+  title: string;
+  focus: string;
+  location: WorkoutLocation;
+  durationMin: number;
+  warmup: string[];
+  exercises: PlannedExercise[];
+  cooldown: string[];
+  notes?: string;
+  generatedAt: string;
+}
+
+/** AI equipment-scan result returned by the vision endpoint. */
+export interface EquipmentScanResult {
+  name: string;
+  category: EquipmentCategory;
+  primaryMuscles: string[];
+  description: string;
+  exampleExercises: string[];
+  howToUse?: string;
+  confidence: number;
+  notes?: string;
+}
+
+export interface BodyFocusArea {
+  area: string;
+  observation: string;
+  action: string;
+}
+
+export interface BodyScanResult {
+  summary: string;
+  estimatedComposition?: string;
+  focusAreas: BodyFocusArea[];
+  training: string[];
+  nutrition: string[];
+  milestones: string[];
+  encouragement: string;
+  disclaimer: string;
+  confidence: number;
+}
+
+export interface BodyAssessment {
+  id: string;
+  createdAt: string;
+  result: BodyScanResult;
 }
 
 export type ChatRole = 'user' | 'assistant' | 'system';
@@ -166,7 +294,7 @@ export interface CoachPlan {
 /** AI food-scan result returned by the vision endpoint. */
 export interface FoodScanResult {
   name: string;
-  items: Array<{ name: string; portion: string; nutrients: Nutrients }>;
+  items: { name: string; portion: string; nutrients: Nutrients }[];
   total: Nutrients;
   confidence: number;
   notes?: string;

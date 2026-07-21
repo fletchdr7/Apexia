@@ -1,4 +1,5 @@
 import type {
+  BodyCompositionEntry,
   FoodEntry,
   Supplement,
   SupplementLog,
@@ -9,6 +10,10 @@ import { computeTargets } from '@/utils/nutrition';
 
 function isoAgo(hours: number): string {
   return new Date(Date.now() - hours * 3_600_000).toISOString();
+}
+
+function isoDaysAgo(days: number): string {
+  return isoAgo(days * 24);
 }
 
 export const DEMO_PROFILE: UserProfile = (() => {
@@ -78,7 +83,13 @@ export const DEMO_WORKOUTS: WorkoutEntry[] = [
   },
 ];
 
+const OATMEAL_NUTRIENTS = { calories: 320, proteinG: 12, carbsG: 54, fatG: 7, fiberG: 8, sugarG: 12 };
+
 export const DEMO_FOODS: FoodEntry[] = [
+  // A repeated breakfast so the "Quick add" regulars surface right away.
+  { id: 'f_oat1', name: 'Oatmeal + banana', slot: 'breakfast', loggedAt: isoDaysAgo(3), servings: 1, source: 'search', nutrients: OATMEAL_NUTRIENTS },
+  { id: 'f_oat2', name: 'Oatmeal + banana', slot: 'breakfast', loggedAt: isoDaysAgo(2), servings: 1, source: 'search', nutrients: OATMEAL_NUTRIENTS },
+  { id: 'f_oat3', name: 'Oatmeal + banana', slot: 'breakfast', loggedAt: isoDaysAgo(1), servings: 1, source: 'search', nutrients: OATMEAL_NUTRIENTS },
   {
     id: 'f1',
     name: 'Greek yogurt + berries',
@@ -113,8 +124,34 @@ export const DEMO_SUPPLEMENTS: Supplement[] = [
     timing: 'Any time daily',
     goalFit: 0.95,
   },
+  {
+    id: 's2',
+    name: 'Whey Protein Isolate',
+    form: 'powder',
+    servingSize: '1 scoop (32 g)',
+    ingredients: [
+      { name: 'Protein', amount: 25, unit: 'g' },
+      { name: 'Carbohydrate', amount: 2, unit: 'g' },
+      { name: 'Fat', amount: 1, unit: 'g' },
+    ],
+    nutrients: { calories: 120, proteinG: 25, carbsG: 2, fatG: 1 },
+    purpose: 'Convenient high-quality protein',
+    benefits: ['Supports muscle growth & recovery', 'Helps hit daily protein target'],
+    cautions: ['Contains dairy'],
+    timing: 'Post-workout or any time to top up protein',
+    goalFit: 0.9,
+  },
 ];
 
 export const DEMO_SUPPLEMENT_LOGS: SupplementLog[] = [
   { id: 'sl1', supplementId: 's1', supplementName: 'Creatine Monohydrate', takenAt: isoAgo(7), dose: '5 g' },
+];
+
+// Simulated smart-scale trend: body fat trending down, lean mass up (recomposition).
+export const DEMO_BODY_COMPOSITION: BodyCompositionEntry[] = [
+  { id: 'bc_d1', loggedAt: isoDaysAgo(56), weightKg: 84.2, bodyFatPct: 22.5, leanMassKg: 62.6, bmi: 26.0 },
+  { id: 'bc_d2', loggedAt: isoDaysAgo(42), weightKg: 83.6, bodyFatPct: 21.6, leanMassKg: 63.1, bmi: 25.8 },
+  { id: 'bc_d3', loggedAt: isoDaysAgo(28), weightKg: 83.1, bodyFatPct: 20.8, leanMassKg: 63.6, bmi: 25.6 },
+  { id: 'bc_d4', loggedAt: isoDaysAgo(14), weightKg: 82.6, bodyFatPct: 20.1, leanMassKg: 64.0, bmi: 25.5 },
+  { id: 'bc_d5', loggedAt: isoDaysAgo(3), weightKg: 82.0, bodyFatPct: 19.4, leanMassKg: 64.4, bmi: 25.3 },
 ];

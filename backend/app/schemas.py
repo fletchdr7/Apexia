@@ -30,6 +30,17 @@ class FoodScanResult(BaseModel):
     notes: Optional[str] = None
 
 
+class FoodEstimate(BaseModel):
+    name: str
+    servingLabel: str = "1 serving"
+    nutrients: Nutrients
+    confidence: float = Field(default=0.5, ge=0, le=1)
+
+
+class FoodLookupRequest(BaseModel):
+    name: str
+
+
 class SupplementIngredient(BaseModel):
     name: str
     amount: float
@@ -43,11 +54,41 @@ class SupplementResult(BaseModel):
     form: str = "capsule"
     servingSize: Optional[str] = None
     ingredients: list[SupplementIngredient] = []
+    nutrients: Optional[Nutrients] = None
     purpose: Optional[str] = None
     benefits: list[str] = []
     cautions: list[str] = []
     timing: Optional[str] = None
     goalFit: Optional[float] = None
+
+
+class EquipmentResult(BaseModel):
+    name: str
+    category: str = "other"
+    primaryMuscles: list[str] = []
+    description: str = ""
+    exampleExercises: list[str] = []
+    howToUse: Optional[str] = None
+    confidence: float = Field(default=0.5, ge=0, le=1)
+    notes: Optional[str] = None
+
+
+class BodyFocusArea(BaseModel):
+    area: str
+    observation: str
+    action: str
+
+
+class BodyScanResult(BaseModel):
+    summary: str
+    estimatedComposition: Optional[str] = None
+    focusAreas: list[BodyFocusArea] = []
+    training: list[str] = []
+    nutrition: list[str] = []
+    milestones: list[str] = []
+    encouragement: str = ""
+    disclaimer: str = ""
+    confidence: float = Field(default=0.5, ge=0, le=1)
 
 
 class NutritionTargets(BaseModel):
@@ -58,6 +99,13 @@ class NutritionTargets(BaseModel):
     waterMl: float
 
 
+class BodyComposition(BaseModel):
+    bodyFatPct: Optional[float] = None
+    leanMassKg: Optional[float] = None
+    bmi: Optional[float] = None
+    updatedAt: Optional[str] = None
+
+
 class Profile(BaseModel):
     displayName: Optional[str] = None
     sex: Optional[str] = None
@@ -66,12 +114,20 @@ class Profile(BaseModel):
     weightKg: Optional[float] = None
     targetWeightKg: Optional[float] = None
     activityLevel: Optional[str] = None
+    experience: Optional[str] = None
     goal: Optional[GoalType] = None
     weeklyWorkoutTarget: Optional[int] = None
     preferredActivities: list[str] = []
     lifestyle: list[str] = []
     dietaryPreferences: list[str] = []
     targets: Optional[NutritionTargets] = None
+    bodyComposition: Optional[BodyComposition] = None
+
+
+class BodyScanRequest(BaseModel):
+    images: list[str] = []
+    profile: Optional[Profile] = None
+    context: Optional[dict] = None
 
 
 class ImageRequest(BaseModel):
@@ -81,6 +137,14 @@ class ImageRequest(BaseModel):
 
 class SupplementImageRequest(BaseModel):
     image: str
+
+
+class EquipmentImageRequest(BaseModel):
+    image: str
+
+
+class SupplementLookupRequest(BaseModel):
+    name: str
 
 
 class ChatMessageIn(BaseModel):
@@ -99,6 +163,54 @@ class ChatResponse(BaseModel):
 
 class PlanRequest(BaseModel):
     profile: Optional[Profile] = None
+
+
+class EquipmentInput(BaseModel):
+    name: str
+    exampleExercises: list[str] = []
+    primaryMuscles: list[str] = []
+
+
+class PlannedExercise(BaseModel):
+    name: str
+    equipment: Optional[str] = None
+    sets: int = 3
+    reps: str = "8-12"
+    suggestedWeight: Optional[str] = None
+    restSec: Optional[int] = None
+    muscles: list[str] = []
+    notes: Optional[str] = None
+
+
+class WorkoutPlan(BaseModel):
+    title: str
+    focus: str
+    location: str = "gym"
+    durationMin: int = 45
+    warmup: list[str] = []
+    exercises: list[PlannedExercise] = []
+    cooldown: list[str] = []
+    notes: Optional[str] = None
+    generatedAt: str
+
+
+class WorkoutPlanRequest(BaseModel):
+    profile: Optional[Profile] = None
+    location: str = "gym"
+    durationMin: int = 45
+    muscleGroups: list[str] = []
+    equipment: list[EquipmentInput] = []
+
+
+class SwapRequest(BaseModel):
+    profile: Optional[Profile] = None
+    exercise: str
+    muscles: list[str] = []
+    equipment: list[EquipmentInput] = []
+
+
+class SwapResponse(BaseModel):
+    alternatives: list[PlannedExercise] = []
 
 
 class DailyPlanItem(BaseModel):

@@ -1,11 +1,15 @@
 export { Button } from './Button';
 export { Card } from './Card';
 export { Chip } from './Chip';
+export { DateBar } from './DateBar';
 export { EmptyState } from './EmptyState';
+export { ExerciseDemo } from './ExerciseDemo';
+export { ExercisePicker } from './ExercisePicker';
 export { Input } from './Input';
 export { MacroBar } from './MacroBar';
 export { ProgressRing } from './ProgressRing';
 export { Screen } from './Screen';
 export { SectionHeader } from './SectionHeader';
+export { Sparkline } from './Sparkline';
 export { StatTile } from './StatTile';
 export { Text } from './Text';

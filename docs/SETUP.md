@@ -43,8 +43,21 @@ EXPO_PUBLIC_AI_API_URL=https://<your-backend>
 2. Open **SQL Editor** and run the contents of [`supabase/schema.sql`](../supabase/schema.sql).
    This creates all tables, row‑level‑security policies, and a trigger that makes
    a profile row for every new user.
-3. Copy your project's **URL** and **anon key** (Project Settings → API) into
-   `mobile/.env` as shown above.
+3. Also run [`supabase/sync.sql`](../supabase/sync.sql) — it creates the
+   `user_state` table the app uses for cloud sync (email/password auth).
+4. Copy your project's **URL** and **anon (publishable) key** (Project Settings →
+   API) into the app config (`.env` for local dev, `eas.json` for builds).
+5. For the smoothest sign‑up flow, consider turning **off** email confirmation
+   (Supabase → Authentication → Providers → Email → disable "Confirm email").
+   With it on, new users must click a link in their email before they can sign in.
+
+### Auth & sync behavior
+
+- On the first screen you can **create an account**, **sign in**, or **continue
+  without an account** (local‑only, no sync).
+- Signing in pulls your cloud data onto the device; local changes are pushed back
+  automatically (debounced). Your data is stored as a per‑user JSON document in
+  `user_state`, protected by row‑level security.
 
 The schema is ready for the app to sync to. The app currently stores data
 on‑device; wiring the store to Supabase CRUD is the recommended next step and is
@@ -77,10 +90,38 @@ EXPO_PUBLIC_AI_API_URL=http://<your-computer-LAN-ip>:8000
 
 ### Deploy on PythonAnywhere (WSGI)
 
-1. Upload/clone this repo to PythonAnywhere and create a **virtualenv**, then
-   `pip install -r backend/requirements.txt`.
-2. Create a new **Web app** → *Manual configuration* → your Python version.
-3. Edit the WSGI configuration file so it imports the app:
+> ⚠️ **Free tier caveat:** PythonAnywhere **free** accounts can only make outbound
+> internet requests to a small allowlist of sites, and `api.openai.com` is **not**
+> on it — so OpenAI calls will fail on a free account. To use real AI you need a
+> paid PythonAnywhere plan (the $5/mo "Hacker" tier lifts the restriction), or
+> host the backend somewhere with open outbound access (Render/Railway/Fly.io).
+> Everything else (deploy, `/health`) still works on the free tier.
+
+1. Open a **Bash console** on PythonAnywhere and get the code:
+
+   ```bash
+   git clone https://github.com/fletchdr7/Apexia.git
+   cd Apexia
+   git checkout cursor/apexia-fitness-app-foundation-e8c8   # until the PR is merged to main
+   ```
+
+2. Create a **virtualenv** and install dependencies:
+
+   ```bash
+   mkvirtualenv apexia --python=python3.10
+   pip install -r backend/requirements.txt
+   ```
+
+3. Add your OpenAI key by creating `backend/.env`:
+
+   ```bash
+   echo "OPENAI_API_KEY=sk-...your-key..." > ~/Apexia/backend/.env
+   ```
+
+4. Create a new **Web app** → *Manual configuration* → the same Python version.
+5. In the Web tab, set **Virtualenv** to `/home/<youruser>/.virtualenvs/apexia`.
+6. Edit the **WSGI configuration file** (link in the Web tab): delete the sample
+   content and replace it with:
 
    ```python
    import sys
@@ -90,12 +131,33 @@ EXPO_PUBLIC_AI_API_URL=http://<your-computer-LAN-ip>:8000
    from wsgi import application  # noqa
    ```
 
-4. Set environment variables (e.g. `OPENAI_API_KEY`) in the Web tab, then
-   **Reload** the web app. Your API is live at `https://<youruser>.pythonanywhere.com`.
-5. Put that URL in `mobile/.env` as `EXPO_PUBLIC_AI_API_URL`.
+7. Click **Reload**. Visit `https://<youruser>.pythonanywhere.com/health` — it
+   should return `{"status":"ok","openai":true,...}`.
+8. Put that base URL in the app as `EXPO_PUBLIC_AI_API_URL` (see the app config
+   section above / `eas.json`).
 
 > Prefer ASGI hosting (Render, Railway, Fly.io)? Just run
-> `uvicorn app.main:app` — no WSGI wrapper needed.
+> `uvicorn app.main:app` — no WSGI wrapper needed, and outbound access is open by
+> default on those hosts.
+
+### Deploy on Render (no custom domain needed)
+
+Handy when your `username.pythonanywhere.com` subdomain is already used by another
+app, since PythonAnywhere only gives you one free subdomain.
+
+1. Push this repo to GitHub (already done) and sign in at https://render.com.
+2. **New +** → **Blueprint** → connect the repo. Render reads `render.yaml` and
+   creates the `apexia-api` web service (root dir `backend`, uvicorn start command).
+   - Or do it manually: **New + → Web Service**, Root Directory `backend`,
+     Build `pip install -r requirements.txt`,
+     Start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+3. In the service's **Environment**, add `OPENAI_API_KEY = sk-...`.
+4. Deploy, then open `https://<service>.onrender.com/health` → expects
+   `{"status":"ok","openai":true}`.
+5. Put that URL in the app as `EXPO_PUBLIC_AI_API_URL`.
+
+> Render's free tier sleeps after ~15 min idle, so the first request after a nap
+> takes ~30–60s to wake. Fine for personal use; upgrade for always‑on.
 
 ---
 

@@ -7,19 +7,50 @@ deterministic heuristic result, so the backend is always usable in development.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
 from .config import get_settings
+
+logger = logging.getLogger("apexia.ai")
 from .schemas import (
     ChatMessageIn,
     CoachPlan,
     DailyPlanItem,
+    BodyScanRequest,
+    BodyScanResult,
+    EquipmentInput,
+    EquipmentResult,
+    FoodEstimate,
     FoodScanResult,
+    Nutrients,
+    PlannedExercise,
     Profile,
     SupplementResult,
+    SwapRequest,
+    WorkoutPlan,
+    WorkoutPlanRequest,
 )
+
+GOAL_REP_SCHEME = {
+    "build_muscle": {"sets": 4, "reps": "8-12", "restSec": 90},
+    "lose_fat": {"sets": 3, "reps": "12-15", "restSec": 45},
+    "recomp": {"sets": 3, "reps": "10-12", "restSec": 60},
+    "endurance": {"sets": 3, "reps": "15-20", "restSec": 30},
+    "maintain": {"sets": 3, "reps": "10-12", "restSec": 60},
+}
+
+EQUIPMENT_CATEGORIES = {
+    "free_weights",
+    "machine",
+    "cable",
+    "cardio",
+    "bodyweight",
+    "accessory",
+    "other",
+}
 
 GOAL_LABELS = {
     "lose_fat": "lose fat",
@@ -51,7 +82,38 @@ def _client():
 
         return OpenAI(api_key=settings.openai_api_key)
     except Exception:
+        logger.exception("Failed to create OpenAI client")
         return None
+
+
+def diagnose_openai() -> dict:
+    """Make a tiny real OpenAI call so failures (bad key, no quota, no model
+    access) are visible in the browser instead of silently falling back."""
+    settings = get_settings()
+    if not settings.has_openai:
+        return {"ok": False, "reason": "OPENAI_API_KEY is not set on the server"}
+    client = _client()
+    if client is None:
+        return {"ok": False, "reason": "OpenAI client could not be created (see logs)"}
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": "Reply with the single word: pong"}],
+            max_tokens=5,
+        )
+        return {
+            "ok": True,
+            "chat_model": settings.openai_model,
+            "vision_model": settings.openai_vision_model,
+            "reply": (resp.choices[0].message.content or "").strip(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "chat_model": settings.openai_model,
+            "error_type": type(exc).__name__,
+            "error": str(exc)[:600],
+        }
 
 
 def _data_uri(image_b64: str) -> str:
@@ -122,6 +184,7 @@ def analyze_food(image_b64: str, mode: str) -> FoodScanResult:
         data = _extract_json(resp.choices[0].message.content or "")
         return FoodScanResult.model_validate(data)
     except Exception:
+        logger.exception("Food vision call failed; returning heuristic")
         return _food_fallback(mode)
 
 
@@ -153,6 +216,51 @@ def _food_fallback(mode: str) -> FoodScanResult:
     )
 
 
+def estimate_food(name: str) -> FoodEstimate:
+    client = _client()
+    clean = (name or "").strip()
+    fallback = FoodEstimate(
+        name=clean or "Food",
+        servingLabel="1 serving",
+        nutrients=Nutrients(calories=200, proteinG=8, carbsG=25, fatG=8),
+        confidence=0.3,
+    )
+    if client is None or not clean:
+        return fallback
+    settings = get_settings()
+    prompt = (
+        "Estimate the nutrition for one typical serving of the food below. Respond ONLY with JSON: "
+        '{"servingLabel": str, "calories": num, "proteinG": num, "carbsG": num, "fatG": num, '
+        '"fiberG": num, "sugarG": num, "sodiumMg": num}. Be realistic for a normal portion.\nFood: '
+        + clean
+    )
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=250,
+            temperature=0.2,
+        )
+        d = _extract_json(resp.choices[0].message.content or "")
+        return FoodEstimate(
+            name=clean,
+            servingLabel=str(d.get("servingLabel") or "1 serving"),
+            nutrients=Nutrients(
+                calories=d.get("calories", 0),
+                proteinG=d.get("proteinG", 0),
+                carbsG=d.get("carbsG", 0),
+                fatG=d.get("fatG", 0),
+                fiberG=d.get("fiberG"),
+                sugarG=d.get("sugarG"),
+                sodiumMg=d.get("sodiumMg"),
+            ),
+            confidence=0.6,
+        )
+    except Exception:
+        logger.exception("Food estimate failed")
+        return fallback
+
+
 # ---------------------------------------------------------------------------
 # Supplement vision
 # ---------------------------------------------------------------------------
@@ -162,8 +270,27 @@ SUPPLEMENT_PROMPT = (
     "Respond ONLY with JSON: "
     '{"name": str, "brand": str, "form": one_of[capsule|tablet|powder|liquid|gummy|softgel], '
     '"servingSize": str, "ingredients": [{"name": str, "amount": num, "unit": str, "dailyValuePct": num}], '
-    '"purpose": str, "benefits": [str], "cautions": [str], "timing": str}. '
-    "Be accurate and evidence-based; keep benefits/cautions short."
+    '"nutrients": {"calories": num, "proteinG": num, "carbsG": num, "fatG": num, "sugarG": num, "sodiumMg": num}, '
+    '"purpose": str, "benefits": [str], "cautions": [str], "timing": str, "goalFit": num_0_to_1}. '
+    "Set 'nutrients' to the macros PER SERVING from the Nutrition/Supplement Facts panel (e.g. protein powder, "
+    "mass gainer, BCAAs). If the product provides no meaningful calories/macros (vitamins, creatine, minerals), "
+    "omit 'nutrients' or set its values to 0. "
+    "Be accurate and evidence-based; keep benefits/cautions short. "
+    "If you cannot clearly identify the supplement from the image, set name to 'Unknown supplement', "
+    "leave ingredients/benefits/cautions empty, and set goalFit to 0."
+)
+
+SUPPLEMENT_LOOKUP_PROMPT = (
+    "Provide an evidence-based analysis of the dietary supplement named below. "
+    "Respond ONLY with JSON: "
+    '{"name": str, "form": one_of[capsule|tablet|powder|liquid|gummy|softgel], "servingSize": str, '
+    '"ingredients": [{"name": str, "amount": num, "unit": str}], '
+    '"nutrients": {"calories": num, "proteinG": num, "carbsG": num, "fatG": num}, '
+    '"purpose": str, "benefits": [str], "cautions": [str], "timing": str}. Keep it concise and accurate. '
+    "Set 'nutrients' to typical macros PER SERVING when the supplement provides meaningful calories/macros "
+    "(e.g. protein powder ~1 scoop, mass gainer); otherwise omit it or use 0. "
+    "If the name is not a real/known supplement, set name to 'Unknown supplement' and leave the rest empty.\n"
+    "Supplement name: "
 )
 
 
@@ -190,20 +317,175 @@ def analyze_supplement(image_b64: str) -> SupplementResult:
         data = _extract_json(resp.choices[0].message.content or "")
         return SupplementResult.model_validate(data)
     except Exception:
+        logger.exception("Supplement vision call failed; returning heuristic")
         return _supplement_fallback()
 
 
 def _supplement_fallback() -> SupplementResult:
     return SupplementResult(
-        name="Creatine Monohydrate",
-        form="powder",
-        servingSize="5 g",
-        ingredients=[{"name": "Creatine Monohydrate", "amount": 5, "unit": "g"}],
-        purpose="Strength & power output",
-        benefits=["Increases strength and lean mass", "Supports recovery"],
-        cautions=["Stay hydrated"],
-        timing="Any time daily; consistency matters most",
-        goalFit=0.9,
+        name="Unknown supplement",
+        form="capsule",
+        ingredients=[],
+        purpose="",
+        benefits=[],
+        cautions=[],
+        goalFit=0,
+    )
+
+
+def lookup_supplement(name: str) -> SupplementResult:
+    client = _client()
+    clean = (name or "").strip()
+    if client is None or not clean:
+        return SupplementResult(name=clean or "Unknown supplement", form="capsule", ingredients=[], benefits=[], cautions=[])
+    settings = get_settings()
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": SUPPLEMENT_LOOKUP_PROMPT + clean}],
+            max_tokens=600,
+            temperature=0.2,
+        )
+        data = _extract_json(resp.choices[0].message.content or "")
+        return SupplementResult.model_validate(data)
+    except Exception:
+        logger.exception("Supplement lookup failed")
+        return SupplementResult(name=clean, form="capsule", ingredients=[], benefits=[], cautions=[])
+
+
+# ---------------------------------------------------------------------------
+# Equipment vision
+# ---------------------------------------------------------------------------
+
+EQUIPMENT_PROMPT = (
+    "You are a strength coach. Identify the gym equipment in this photo. "
+    "Respond ONLY with JSON: "
+    '{"name": str, "category": one_of[free_weights|machine|cable|cardio|bodyweight|accessory|other], '
+    '"primaryMuscles": [str], "description": str, "exampleExercises": [str (2-4 items)], '
+    '"howToUse": str, "confidence": num_0_to_1}. '
+    "Keep description to one or two sentences. If unsure, still give your best guess with lower confidence."
+)
+
+
+def analyze_equipment(image_b64: str) -> EquipmentResult:
+    client = _client()
+    if client is None or not image_b64:
+        return _equipment_fallback()
+    settings = get_settings()
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_vision_model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": EQUIPMENT_PROMPT},
+                        {"type": "image_url", "image_url": {"url": _data_uri(image_b64)}},
+                    ],
+                }
+            ],
+            max_tokens=600,
+            temperature=0.2,
+        )
+        data = _extract_json(resp.choices[0].message.content or "")
+        if data.get("category") not in EQUIPMENT_CATEGORIES:
+            data["category"] = "other"
+        return EquipmentResult.model_validate(data)
+    except Exception:
+        logger.exception("Equipment vision call failed; returning heuristic")
+        return _equipment_fallback()
+
+
+def _equipment_fallback() -> EquipmentResult:
+    return EquipmentResult(
+        name="Unrecognized equipment",
+        category="other",
+        primaryMuscles=[],
+        description="Set OPENAI_API_KEY for real equipment recognition.",
+        exampleExercises=[],
+        confidence=0.4,
+        notes="Heuristic fallback.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Body scan (physique assessment + personalized plan)
+# ---------------------------------------------------------------------------
+
+BODY_SCAN_SYSTEM = (
+    "You are Apexia, a supportive, professional personal trainer. You are analyzing "
+    "progress photos to give constructive, encouraging, health- and performance-focused "
+    "guidance. STRICT RULES: be kind and body-positive, never shaming; do NOT give medical "
+    "diagnoses; do NOT state exact body-fat percentages as fact (use gentle qualitative ranges "
+    "only); avoid any language that could encourage disordered eating; focus on actionable, "
+    "sustainable habits. Use ALL of the user's data provided to personalize the plan."
+)
+
+BODY_SCAN_PROMPT = (
+    "Analyze the physique photo(s) together with the user's data below and produce a personalized "
+    "assessment. Respond ONLY with JSON: {\"summary\": str, \"estimatedComposition\": str (gentle, "
+    "qualitative, e.g. 'lean and athletic'), \"focusAreas\": [{\"area\": str, \"observation\": str, "
+    "\"action\": str}], \"training\": [str], \"nutrition\": [str], \"milestones\": [str], "
+    "\"encouragement\": str, \"disclaimer\": str, \"confidence\": num_0_to_1}. "
+    "3-5 focus areas; training/nutrition as concise, specific bullets tuned to their goal, equipment, "
+    "and current numbers; 2-4 realistic milestones. Keep it motivating and practical.\n\nUSER DATA:\n"
+)
+
+
+def analyze_body_scan(req: BodyScanRequest) -> BodyScanResult:
+    client = _client()
+    data_blob = json.dumps({"profile": req.profile.model_dump() if req.profile else None, "context": req.context})
+    if client is None or not req.images:
+        return _body_scan_fallback(req)
+    settings = get_settings()
+    try:
+        content: list = [{"type": "text", "text": BODY_SCAN_PROMPT + data_blob}]
+        for img in req.images[:3]:
+            content.append({"type": "image_url", "image_url": {"url": _data_uri(img)}})
+        resp = client.chat.completions.create(
+            model=settings.openai_vision_model,
+            messages=[
+                {"role": "system", "content": f"{BODY_SCAN_SYSTEM}\n\n{EVIDENCE_PREAMBLE}\n\n{EVIDENCE_FACTS}"},
+                {"role": "user", "content": content},
+            ],
+            max_tokens=1200,
+            temperature=0.5,
+        )
+        parsed = _extract_json(resp.choices[0].message.content or "")
+        result = BodyScanResult.model_validate(parsed)
+        if not result.disclaimer:
+            result.disclaimer = (
+                "This is an AI estimate from photos for general guidance only — not medical advice. "
+                "Consult a professional for personalized medical or nutrition needs."
+            )
+        return result
+    except Exception:
+        logger.exception("Body scan call failed; using heuristic")
+        return _body_scan_fallback(req)
+
+
+def _body_scan_fallback(req: BodyScanRequest) -> BodyScanResult:
+    goal = (req.profile.goal if req.profile and req.profile.goal else "maintain")
+    supps = ", ".join(GOAL_SUPPLEMENTS.get(goal, [])[:2])
+    return BodyScanResult(
+        summary=f"A personalized plan focused on {GOAL_LABELS.get(goal, goal)}, built from your logged data.",
+        estimatedComposition="Add photos and connect the AI backend for a visual assessment.",
+        focusAreas=[
+            {"area": "Consistency", "observation": "Progress comes from repeatable habits.", "action": "Hit your weekly workout target and protein goal most days."},
+            {"area": "Progressive overload", "observation": "Strength drives change.", "action": "Add reps or a little weight each session on your key lifts."},
+        ],
+        training=[
+            "Train each muscle group ~2x/week with your available equipment.",
+            "Prioritize compound lifts; add isolation for lagging areas.",
+        ],
+        nutrition=[
+            f"Hit ~{int(req.profile.targets.proteinG)}g protein daily." if req.profile and req.profile.targets else "Keep protein high and consistent.",
+            "Favor whole foods; keep calories aligned with your goal.",
+        ],
+        milestones=["Log 4 workouts/week for a month", "Add 2.5kg to a main lift", "Stay within calorie target 5 days/week"],
+        encouragement="You've got the tools and the data — small consistent steps compound fast.",
+        disclaimer="General guidance only, not medical advice.",
+        confidence=0.5,
     )
 
 
@@ -212,12 +494,38 @@ def _supplement_fallback() -> SupplementResult:
 # ---------------------------------------------------------------------------
 
 
+EVIDENCE_PREAMBLE = (
+    "Ground every recommendation in mainstream, peer-reviewed health science and major guidelines "
+    "(WHO, CDC, ACSM, the International Society of Sports Nutrition [ISSN], the Academy of Nutrition "
+    "and Dietetics, and NIH / Dietary Guidelines for Americans). "
+    "Do NOT invent facts, statistics, studies, authors, years, or citations — if you are unsure or the "
+    "evidence is weak, say so plainly and give conservative, widely-accepted guidance instead of a "
+    "confident-sounding guess. Prefer established ranges over precise but unsupported numbers. "
+    "When you give a key recommendation you may name the guideline body it aligns with (e.g. 'per ACSM'), "
+    "but never fabricate a specific paper or DOI. "
+    "You are not a medical provider: do not diagnose or treat conditions; recommend a qualified "
+    "professional for medical, injury, pregnancy, medication, or clinical-nutrition needs, and advise "
+    "seeing a doctor for red-flag symptoms (chest pain, dizziness/fainting, signs of disordered eating). "
+    "Keep advice safe, sustainable, and non-judgmental."
+)
+
+EVIDENCE_FACTS = (
+    "Well-established anchors to rely on: protein ~1.6-2.2 g/kg/day supports muscle growth (ISSN); "
+    "creatine monohydrate 3-5 g/day is safe and effective for strength (ISSN); adults benefit from "
+    ">=150 min/week moderate aerobic activity plus >=2 days/week resistance training (WHO/CDC/ACSM); "
+    "a sustainable weight-change rate is ~0.5-1% of bodyweight per week; adults need 7-9 h sleep "
+    "(AASM/CDC); hydration roughly 30-35 ml/kg/day. Individual needs vary — note that when relevant."
+)
+
+
 def _system_prompt(profile: Optional[Profile]) -> str:
     base = (
+        f"{EVIDENCE_PREAMBLE}\n\n"
         "You are Apexia, a friendly, practical fitness and nutrition coach. "
         "Your user often has a hectic life (job, kids). Favor flexible, realistic advice over rigid routines. "
         "Be encouraging and concise. Never shame the user for missing a day. "
-        "Give specific, actionable suggestions for meals, workouts, and supplements."
+        "Give specific, actionable suggestions for meals, workouts, and supplements. "
+        f"\n\n{EVIDENCE_FACTS}"
     )
     if not profile:
         return base
@@ -235,6 +543,19 @@ def _system_prompt(profile: Optional[Profile]) -> str:
         parts.append(f"- Lifestyle: {', '.join(profile.lifestyle)}")
     if profile.dietaryPreferences:
         parts.append(f"- Diet: {', '.join(profile.dietaryPreferences)}")
+    bc = profile.bodyComposition
+    if bc and (bc.bodyFatPct is not None or bc.leanMassKg is not None or bc.bmi is not None):
+        bits = []
+        if bc.bodyFatPct is not None:
+            bits.append(f"{bc.bodyFatPct}% body fat")
+        if bc.leanMassKg is not None:
+            bits.append(f"{bc.leanMassKg} kg lean/muscle mass")
+        if bc.bmi is not None:
+            bits.append(f"BMI {bc.bmi}")
+        parts.append(
+            f"- Body composition (from smart scale): {', '.join(bits)}. "
+            "Use lean mass to gauge protein needs and body-fat trends over time; avoid over-indexing on BMI alone."
+        )
     return "\n".join(parts)
 
 
@@ -249,11 +570,12 @@ def coach_chat(messages: list[ChatMessageIn], profile: Optional[Profile]) -> str
         resp = client.chat.completions.create(
             model=settings.openai_model,
             messages=payload,
-            max_tokens=400,
-            temperature=0.6,
+            max_tokens=450,
+            temperature=0.4,
         )
         return (resp.choices[0].message.content or "").strip() or _coach_fallback(messages, profile)
     except Exception:
+        logger.exception("Coach chat call failed; returning heuristic")
         return _coach_fallback(messages, profile)
 
 
@@ -281,6 +603,183 @@ def _coach_fallback(messages: list[ChatMessageIn], profile: Optional[Profile]) -
     return (
         f"I'm your Apexia coach{name}. Ask me about meals, workouts, supplements, or staying on track on a busy day."
     )
+
+
+# ---------------------------------------------------------------------------
+# Workout plan builder
+# ---------------------------------------------------------------------------
+
+
+def generate_workout(req: WorkoutPlanRequest) -> WorkoutPlan:
+    client = _client()
+    if client is not None:
+        plan = _workout_via_ai(client, req)
+        if plan is not None:
+            return plan
+    return _workout_fallback(req)
+
+
+def _workout_via_ai(client, req: WorkoutPlanRequest) -> Optional[WorkoutPlan]:
+    settings = get_settings()
+    p = req.profile
+    equipment_names = [e.name for e in req.equipment]
+    bodyweight = p.weightKg if p and p.weightKg else 75
+    experience = (p.experience if p and p.experience else "beginner")
+    sex = (p.sex if p and p.sex else "male")
+    goal = (p.goal if p and p.goal else "maintain")
+
+    focus_line = (
+        f"Focus on these muscle groups: {req.muscleGroups}. "
+        if req.muscleGroups and "full_body" not in req.muscleGroups
+        else "Train the full body. "
+    )
+    prompt = (
+        f"Build a single {req.location} workout that fits in about {req.durationMin} minutes. "
+        f"{focus_line}"
+        f"Only use these available equipment items: {equipment_names or ['bodyweight only']}. "
+        f"The user: bodyweight {bodyweight} kg, sex {sex}, experience {experience}, goal {goal}. "
+        "Pick an appropriate number of exercises for the time budget (include warm-up and cool-down). "
+        "For each weighted exercise, suggest a CONSERVATIVE starting weight in kg based on their bodyweight "
+        "and experience (bodyweight movements should say 'bodyweight'). Use rep ranges suited to the goal. "
+        "Respond ONLY with JSON: {\"title\": str, \"focus\": str, \"warmup\": [str], "
+        "\"exercises\": [{\"name\": str, \"equipment\": str, \"sets\": int, \"reps\": str, "
+        "\"suggestedWeight\": str, \"restSec\": int, \"muscles\": [str], \"notes\": str}], "
+        "\"cooldown\": [str], \"notes\": str}. Keep notes short; weights are starting estimates to adjust."
+    )
+    try:
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": _system_prompt(req.profile)},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=1100,
+            temperature=0.5,
+        )
+        data = _extract_json(resp.choices[0].message.content or "")
+        exercises = [PlannedExercise.model_validate(ex) for ex in data.get("exercises", [])]
+        if not exercises:
+            return None
+        return WorkoutPlan(
+            title=data.get("title", f"{req.location.title()} workout"),
+            focus=data.get("focus", ""),
+            location=req.location,
+            durationMin=req.durationMin,
+            warmup=data.get("warmup", []),
+            exercises=exercises,
+            cooldown=data.get("cooldown", []),
+            notes=data.get("notes"),
+            generatedAt=_now_iso(),
+        )
+    except Exception:
+        logger.exception("Workout plan call failed; using heuristic")
+        return None
+
+
+def _workout_fallback(req: WorkoutPlanRequest) -> WorkoutPlan:
+    goal = (req.profile.goal if req.profile and req.profile.goal else "maintain")
+    scheme = GOAL_REP_SCHEME.get(goal, GOAL_REP_SCHEME["maintain"])
+    # roughly one exercise per ~7 minutes after warm-up/cool-down
+    slots = max(3, min(8, (req.durationMin - 10) // 7))
+
+    pool: list[tuple[str, str]] = []  # (exercise, equipment)
+    for e in req.equipment:
+        for ex in (e.exampleExercises or [e.name]):
+            pool.append((ex, e.name))
+    if not pool:
+        pool = [("Push-ups", "Bodyweight"), ("Bodyweight squats", "Bodyweight"), ("Plank", "Bodyweight"), ("Lunges", "Bodyweight")]
+
+    chosen = pool[:slots]
+    exercises = [
+        PlannedExercise(
+            name=name,
+            equipment=equip,
+            sets=scheme["sets"],
+            reps=scheme["reps"],
+            restSec=scheme["restSec"],
+            suggestedWeight="bodyweight" if equip.lower() == "bodyweight" else "moderate — leave ~2 reps in reserve",
+        )
+        for name, equip in chosen
+    ]
+    return WorkoutPlan(
+        title=f"{req.location.title()} workout",
+        focus="Full body",
+        location=req.location,
+        durationMin=req.durationMin,
+        warmup=["5 min easy cardio", "Dynamic stretches for the muscles you'll train"],
+        exercises=exercises,
+        cooldown=["3-5 min walk", "Stretch the muscles you trained"],
+        notes="Starting estimate — adjust weights so the last 1-2 reps are challenging.",
+        generatedAt=_now_iso(),
+    )
+
+
+def suggest_swaps(req: SwapRequest) -> list[PlannedExercise]:
+    client = _client()
+    scheme = GOAL_REP_SCHEME.get(
+        (req.profile.goal if req.profile and req.profile.goal else "maintain"), GOAL_REP_SCHEME["maintain"]
+    )
+    if client is not None:
+        try:
+            settings = get_settings()
+            prompt = (
+                f"The user wants to replace '{req.exercise}' (targets: {req.muscles}). "
+                f"Suggest 4 alternative exercises that train the same muscle group(s) using ONLY this "
+                f"available equipment: {[e.name for e in req.equipment] or ['bodyweight']}. "
+                "Do not include the original exercise. Respond ONLY with JSON: "
+                '{"alternatives": [{"name": str, "equipment": str, "muscles": [str], "notes": str}]}.'
+            )
+            resp = client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+                temperature=0.4,
+            )
+            data = _extract_json(resp.choices[0].message.content or "")
+            out: list[PlannedExercise] = []
+            for alt in data.get("alternatives", []):
+                out.append(
+                    PlannedExercise(
+                        name=alt.get("name", ""),
+                        equipment=alt.get("equipment"),
+                        sets=scheme["sets"],
+                        reps=scheme["reps"],
+                        restSec=scheme["restSec"],
+                        muscles=alt.get("muscles", []),
+                        notes=alt.get("notes"),
+                    )
+                )
+            if out:
+                return out
+        except Exception:
+            logger.exception("Swap suggestion failed; using heuristic")
+
+    # Fallback: pull matching exercises from equipment example lists.
+    targets = [m.lower() for m in req.muscles]
+    out: list[PlannedExercise] = []
+    seen: set[str] = set()
+    for e in req.equipment:
+        matches = not targets or any(
+            any(t in m.lower() or m.lower() in t for t in targets) for m in e.primaryMuscles
+        )
+        if not matches:
+            continue
+        for ex in (e.exampleExercises or [e.name]):
+            if ex.lower() == req.exercise.lower() or ex.lower() in seen:
+                continue
+            seen.add(ex.lower())
+            out.append(
+                PlannedExercise(
+                    name=ex,
+                    equipment=e.name,
+                    sets=scheme["sets"],
+                    reps=scheme["reps"],
+                    restSec=scheme["restSec"],
+                    muscles=e.primaryMuscles,
+                    suggestedWeight="bodyweight" if e.name.lower() == "bodyweight" else "moderate",
+                )
+            )
+    return out[:6]
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +835,7 @@ def _plan_via_ai(client, profile: Profile) -> Optional[CoachPlan]:
             generatedAt=_now_iso(),
         )
     except Exception:
+        logger.exception("Daily plan call failed; using heuristic")
         return None
 
 

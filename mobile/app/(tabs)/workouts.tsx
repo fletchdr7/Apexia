@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
-import { Button, Card, EmptyState, Screen, SectionHeader, StatTile, Text } from '@/components';
+import { Button, Card, DateBar, EmptyState, Screen, SectionHeader, StatTile, Text } from '@/components';
 import { ACTIVITIES } from '@/constants/activities';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
@@ -11,7 +11,8 @@ import { isSameDay, relativeDay, timeLabel } from '@/utils/date';
 export default function Workouts() {
   const theme = useTheme();
   const router = useRouter();
-  const { workouts, profile, removeWorkout } = useAppStore();
+  const { workouts, profile, removeWorkout, gymEquipmentIds, homeEquipmentIds, selectedDate, setSelectedDate } =
+    useAppStore();
 
   const now = new Date();
   const weekStart = new Date(now);
@@ -29,7 +30,29 @@ export default function Workouts() {
         <Button label="Log" icon="add" onPress={() => router.push('/workout/log')} fullWidth={false} size="sm" />
       </View>
 
-      <Card style={{ marginTop: 8 }}>
+      <View style={{ marginTop: 8 }}>
+        <DateBar date={selectedDate} onChange={setSelectedDate} />
+        <Text variant="caption" color="textFaint" style={{ marginTop: 6, textAlign: 'center' }}>
+          New workouts are logged to this day
+        </Text>
+      </View>
+
+      <Card onPress={() => router.push('/workout/plan')} style={{ marginTop: 12 }}>
+        <View style={styles.row}>
+          <View style={[styles.icon, { backgroundColor: theme.colors.brand }]}>
+            <Ionicons name="sparkles" size={22} color={theme.colors.onBrand} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text variant="label">Build a workout</Text>
+            <Text variant="caption" color="textMuted">
+              AI plan from your equipment, time & goal
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.colors.textFaint} />
+        </View>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
             <Text variant="caption" color="textMuted">
@@ -60,6 +83,24 @@ export default function Workouts() {
         <StatTile icon="flame" label="Calories" value={`${weekCalories}`} tint={theme.colors.fat} />
       </View>
 
+      <SectionHeader title="Equipment" actionLabel="Manage" onAction={() => router.push('/equipment')} />
+      <Card onPress={() => router.push('/equipment')}>
+        <View style={styles.row}>
+          <View style={[styles.icon, { backgroundColor: theme.colors.brandSoft }]}>
+            <Ionicons name="barbell" size={22} color={theme.colors.brand} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text variant="label">My equipment</Text>
+            <Text variant="caption" color="textMuted">
+              {gymEquipmentIds.length + homeEquipmentIds.length > 0
+                ? `Gym ${gymEquipmentIds.length} · Home ${homeEquipmentIds.length} · scan to add more`
+                : 'Select what you have, or scan gym equipment to add it'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.colors.textFaint} />
+        </View>
+      </Card>
+
       <SectionHeader title="History" />
       {workouts.length === 0 ? (
         <EmptyState
@@ -89,8 +130,16 @@ export default function Workouts() {
                     {w.caloriesBurned ? ` · ${w.caloriesBurned} kcal` : ''}
                   </Text>
                 </View>
-                <Pressable hitSlop={10} onPress={() => removeWorkout(w.id)}>
-                  <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textFaint} />
+                <Pressable
+                  hitSlop={10}
+                  onPress={() =>
+                    Alert.alert('Delete workout', `Delete ${w.title}?`, [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => removeWorkout(w.id) },
+                    ])
+                  }
+                >
+                  <Ionicons name="trash-outline" size={18} color={theme.colors.textFaint} />
                 </Pressable>
               </View>
               {w.exercises && w.exercises.length > 0 ? (

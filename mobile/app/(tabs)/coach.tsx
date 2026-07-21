@@ -1,4 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -12,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components';
+import { getCoachAvatar } from '@/constants/avatars';
 import { config } from '@/lib/config';
 import { chatWithCoach } from '@/lib/api';
 import { useAppStore } from '@/store/AppStore';
@@ -28,7 +31,9 @@ const SUGGESTIONS = [
 
 export default function Coach() {
   const theme = useTheme();
+  const router = useRouter();
   const { profile } = useAppStore();
+  const coachAvatar = getCoachAvatar(profile?.coachAvatarId);
   const scrollRef = useRef<ScrollView>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -72,15 +77,29 @@ export default function Coach() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-        <View style={[styles.avatar, { backgroundColor: theme.colors.brand }]}>
-          <Ionicons name="sparkles" size={18} color={theme.colors.onBrand} />
-        </View>
+        {coachAvatar ? (
+          <Image source={coachAvatar.source} style={styles.avatar} contentFit="cover" />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: theme.colors.brand, alignItems: 'center', justifyContent: 'center' }]}>
+            <Ionicons name="sparkles" size={18} color={theme.colors.onBrand} />
+          </View>
+        )}
         <View style={{ flex: 1 }}>
-          <Text variant="subtitle">Apexia Coach</Text>
+          <Text variant="subtitle">{coachAvatar ? `Coach ${coachAvatar.label}` : 'Apexia Coach'}</Text>
           <Text variant="caption" color="textMuted">
             {config.hasAiBackend ? 'AI-powered' : 'Demo mode · connect AI backend for full power'}
           </Text>
         </View>
+        <Pressable
+          onPress={() => router.push('/body-scan')}
+          style={[styles.scanBtn, { backgroundColor: theme.colors.brandSoft }]}
+          hitSlop={8}
+        >
+          <Ionicons name="body" size={16} color={theme.colors.brand} />
+          <Text variant="caption" style={{ color: theme.colors.brand, marginLeft: 6 }}>
+            Body scan
+          </Text>
+        </Pressable>
       </View>
 
       <KeyboardAvoidingView
@@ -113,6 +132,9 @@ export default function Coach() {
           ) : null}
         </ScrollView>
 
+        <Text variant="caption" color="textFaint" center style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+          Evidence‑based guidance from mainstream guidelines — not medical advice.
+        </Text>
         <View style={[styles.inputBar, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
           <View style={[styles.inputWrap, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <TextInput
@@ -163,6 +185,7 @@ function Bubble({ message }: { message: ChatMessage }) {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth },
   avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  scanBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   bubble: { maxWidth: '86%', padding: 14, borderRadius: 18, marginBottom: 10 },
   suggestions: { marginTop: 12, gap: 8 },
   suggestion: { padding: 14, borderRadius: 14, borderWidth: 1 },

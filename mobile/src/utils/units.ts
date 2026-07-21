@@ -25,3 +25,28 @@ export function formatHeight(cm: number, units: 'metric' | 'imperial'): string {
   const { ft, in: inch } = cmToFtIn(cm);
   return `${ft}'${inch}"`;
 }
+
+export function unitLabel(units: 'metric' | 'imperial'): string {
+  return units === 'imperial' ? 'lb' : 'kg';
+}
+
+/** Convert a canonical kg value to the user's display unit (rounded sensibly). */
+export function kgToDisplay(kg: number, units: 'metric' | 'imperial'): number {
+  return units === 'imperial' ? Math.round(kgToLb(kg)) : Math.round(kg * 2) / 2;
+}
+
+/** Convert a value entered in the user's display unit back to canonical kg. */
+export function displayToKg(value: number, units: 'metric' | 'imperial'): number {
+  return units === 'imperial' ? lbToKg(value) : value;
+}
+
+/**
+ * Reformat a planned-weight string (canonical kg, e.g. "~20 kg") into the user's
+ * unit. Non-numeric values like "bodyweight" or "moderate" pass through.
+ */
+export function formatPlannedWeight(suggested: string | undefined, units: 'metric' | 'imperial'): string {
+  if (!suggested) return '';
+  const m = suggested.match(/-?\d+(\.\d+)?/);
+  if (!m) return suggested;
+  return `~${kgToDisplay(Number(m[0]), units)} ${unitLabel(units)}`;
+}

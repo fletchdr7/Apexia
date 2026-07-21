@@ -1,0 +1,63 @@
+name: EAS Update (OTA)
+
+# Publishes an over-the-air JS/asset update to the "preview" channel whenever the
+# app code changes. Installed preview builds pick it up on next launch — no
+# rebuild needed. Native changes (new libraries, icon, permissions) still require
+# a full `eas build`.
+#
+# One-time setup: add an EXPO_TOKEN repository secret
+# (GitHub repo -> Settings -> Secrets and variables -> Actions -> New secret).
+# Create the token at https://expo.dev -> Account settings -> Access tokens.
+
+on:
+  # Manual trigger from the Actions tab (e.g. to force a republish).
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      # Only publish an OTA update when the app itself changes (saves CI minutes
+      # and avoids redundant updates). Use "Run workflow" to force a publish.
+      - "mobile/**"
+
+jobs:
+  update:
+    name: Publish OTA update
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Publish update
+        working-directory: mobile
+        env:
+          # Passed via env (not inlined) so multi-line messages / special
+          # characters can't break the shell command.
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          CI: "1"
+          # EXPO_PUBLIC_* values are inlined into the JS at bundle time. These must
+          # match eas.json's build env, otherwise OTA updates ship a bundle with an
+          # empty backend config (reverting the app to demo mode). All are
+          # client-public values (Supabase anon key + public URLs).
+          EXPO_PUBLIC_SUPABASE_URL: "https://wknbspbeubtlstieobxr.supabase.co"
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: "sb_publishable_FfxF4srSSwxguwofvuGIVg_f2hGmZpz"
+          EXPO_PUBLIC_AI_API_URL: "https://apexia-api.onrender.com"
+        run: |
+          MESSAGE="$(printf '%s' "$COMMIT_MSG" | head -n 1)"
+          if [ -z "$MESSAGE" ]; then MESSAGE="Update ${GITHUB_SHA:0:7}"; fi
+          eas update --branch preview --platform ios --message "$MESSAGE"

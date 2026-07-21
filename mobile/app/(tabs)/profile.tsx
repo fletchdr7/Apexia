@@ -1,18 +1,83 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import { Card, Screen, SectionHeader, Text } from '@/components';
+import { Image } from 'expo-image';
+
+import { Button, Card, Chip, Screen, SectionHeader, Text } from '@/components';
+import { COACH_AVATARS } from '@/constants/avatars';
 import { config } from '@/lib/config';
+import { getBodyCompositionSeries, getLatestBodyComposition, isHealthAvailable, requestHealthPermissions } from '@/lib/health';
 import { useAppStore } from '@/store/AppStore';
+import { useAuth } from '@/store/AuthContext';
 import { useTheme } from '@/theme';
+import { dateKeyOf } from '@/utils/date';
 import { goalLabel } from '@/utils/nutrition';
 import { formatHeight, formatWeight } from '@/utils/units';
 
 export default function Profile() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, resetAll, supplements } = useAppStore();
+  const { profile, resetAll, supplements, updateProfile, healthEnabled, setHealthEnabled, logWeight, mergeBodyComposition } =
+    useAppStore();
+  const { configured, session, email, signOut } = useAuth();
+  const [healthBusy, setHealthBusy] = useState(false);
+  const healthSupported = Platform.OS === 'ios' && isHealthAvailable();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace('/');
+  };
+
+  const connectHealth = async () => {
+    setHealthBusy(true);
+    const ok = await requestHealthPermissions();
+    setHealthBusy(false);
+    setHealthEnabled(ok);
+    if (!ok) {
+      Alert.alert('Apple Health', 'Permission wasn\u2019t granted. You can enable it later in Settings › Health › Data Access & Devices › Apexia.');
+    }
+  };
+
+  const importFromHealth = async () => {
+    if (!profile) return;
+    setHealthBusy(true);
+    const series = await getBodyCompositionSeries(180);
+    const latest = series.length ? series[series.length - 1] : await getLatestBodyComposition();
+    setHealthBusy(false);
+
+    // Backfill weight history and body-composition trend.
+    for (const s of series) if (s.weightKg != null) logWeight(s.weightKg, dateKeyOf(s.date));
+    const days = series.length
+      ? mergeBodyComposition(
+          series.map((s) => ({
+            loggedAt: s.date,
+            weightKg: s.weightKg,
+            bodyFatPct: s.bodyFatPct,
+            leanMassKg: s.leanMassKg,
+            bmi: s.bmi,
+          })),
+        )
+      : 0;
+    if (!series.length && (latest.bodyFatPct != null || latest.leanMassKg != null || latest.bmi != null)) {
+      mergeBodyComposition([{ loggedAt: new Date().toISOString(), ...latest }]);
+    }
+    if (!series.length && latest.weightKg != null) logWeight(latest.weightKg);
+
+    const parts: string[] = [];
+    if (latest.weightKg != null) parts.push(formatWeight(latest.weightKg, profile.units));
+    if (latest.bodyFatPct != null) parts.push(`${latest.bodyFatPct}% fat`);
+    if (latest.leanMassKg != null) parts.push(`${formatWeight(latest.leanMassKg, profile.units)} lean`);
+    if (latest.bmi != null) parts.push(`BMI ${latest.bmi}`);
+    const suffix = days > 1 ? ` (${days} days of history for trends)` : '';
+    Alert.alert(
+      'Apple Health',
+      parts.length
+        ? `Imported: ${parts.join(' · ')}${suffix}.`
+        : 'No recent body data found. Make sure your smart scale (e.g. VeSync) is set to sync with Apple Health.',
+    );
+  };
 
   if (!profile) {
     return (
@@ -68,8 +133,33 @@ export default function Profile() {
         <TargetRow label="Water" value={`${(profile.targets.waterMl / 1000).toFixed(1)} L`} color={theme.colors.info} last />
       </Card>
 
+      <SectionHeader title="Coach avatar" />
+      <Card>
+        <Text color="textMuted" style={{ marginBottom: 14 }}>
+          Choose your AI coach.
+        </Text>
+        <View style={styles.avatarRow}>
+          {COACH_AVATARS.map((a) => {
+            const selected = profile.coachAvatarId === a.id;
+            return (
+              <Pressable key={a.id} onPress={() => updateProfile({ coachAvatarId: a.id })} style={styles.avatarPick}>
+                <Image
+                  source={a.source}
+                  style={[styles.avatarImg, { borderColor: selected ? theme.colors.brand : 'transparent' }]}
+                  contentFit="cover"
+                />
+                <Text variant="caption" color={selected ? 'brand' : 'textMuted'} style={{ marginTop: 6 }}>
+                  {a.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Card>
+
       <SectionHeader title="Manage" />
       <Card padded={false}>
+        <LinkRow icon="trending-up" label="Progress" onPress={() => router.push('/progress')} />
         <LinkRow icon="flask" label="Supplements" onPress={() => router.push('/supplements')} />
         <LinkRow icon="barbell" label="Workout history" onPress={() => router.push('/(tabs)/workouts')} />
         <LinkRow icon="restaurant" label="Nutrition log" onPress={() => router.push('/(tabs)/nutrition')} last />
@@ -78,6 +168,13 @@ export default function Profile() {
       <SectionHeader title="Preferences" />
       <Card>
         <Text variant="label" style={{ marginBottom: 8 }}>
+          Units
+        </Text>
+        <View style={styles.tags}>
+          <Chip label="Imperial (lb)" selected={profile.units === 'imperial'} onPress={() => updateProfile({ units: 'imperial' })} />
+          <Chip label="Metric (kg)" selected={profile.units === 'metric'} onPress={() => updateProfile({ units: 'metric' })} />
+        </View>
+        <Text variant="label" style={{ marginTop: 16, marginBottom: 8 }}>
           Lifestyle
         </Text>
         <View style={styles.tags}>
@@ -108,6 +205,69 @@ export default function Profile() {
           </>
         ) : null}
       </Card>
+
+      {configured ? (
+        <>
+          <SectionHeader title="Account" />
+          <Card>
+            {session ? (
+              <>
+                <View style={styles.aboutRow}>
+                  <Text color="textMuted">Signed in as</Text>
+                  <Text variant="label">{email}</Text>
+                </View>
+                <View style={[styles.aboutRow, { marginBottom: 12 }]}>
+                  <Text color="textMuted">Cloud sync</Text>
+                  <Text variant="label" style={{ color: theme.colors.success }}>
+                    On
+                  </Text>
+                </View>
+                <Button label="Sign out" variant="secondary" icon="log-out-outline" onPress={handleSignOut} />
+              </>
+            ) : (
+              <>
+                <Text color="textMuted" style={{ marginBottom: 12 }}>
+                  Sign in to back up your data and sync it across devices.
+                </Text>
+                <Button
+                  label="Sign in / Create account"
+                  icon="cloud-upload-outline"
+                  onPress={() => router.push('/(auth)/sign-in')}
+                />
+              </>
+            )}
+          </Card>
+        </>
+      ) : null}
+
+      {healthSupported ? (
+        <>
+          <SectionHeader title="Apple Health" />
+          <Card>
+            {healthEnabled ? (
+              <>
+                <View style={[styles.aboutRow, { marginBottom: 12 }]}>
+                  <Text color="textMuted">Status</Text>
+                  <Text variant="label" style={{ color: theme.colors.success }}>
+                    Connected
+                  </Text>
+                </View>
+                <Button label="Import from Apple Health" icon="download-outline" variant="secondary" onPress={importFromHealth} loading={healthBusy} />
+                <Pressable onPress={() => setHealthEnabled(false)} style={{ marginTop: 12, alignItems: 'center' }}>
+                  <Text style={{ color: theme.colors.danger }}>Disconnect</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text color="textMuted" style={{ marginBottom: 12 }}>
+                  Connect Apple Health to show your steps and active energy on Today, and import your latest weight.
+                </Text>
+                <Button label="Connect Apple Health" icon="heart" onPress={connectHealth} loading={healthBusy} />
+              </>
+            )}
+          </Card>
+        </>
+      ) : null}
 
       <SectionHeader title="About" />
       <Card>
@@ -194,4 +354,8 @@ const styles = StyleSheet.create({
   tag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   aboutRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
   reset: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 28, padding: 12 },
+  avatarRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  avatarPick: { alignItems: 'center' },
+  avatarImg: { width: 64, height: 64, borderRadius: 32, borderWidth: 3 },
 });
+
