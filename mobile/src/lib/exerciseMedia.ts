@@ -9,7 +9,7 @@ export interface ExerciseMedia {
 }
 
 // require avoids TS inferring a huge literal type from the ~900KB JSON.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+
 const LIB = require('../data/exerciseLibrary.json') as ExerciseMedia[];
 
 function norm(s: string): string {

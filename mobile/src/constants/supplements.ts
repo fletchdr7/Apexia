@@ -4,7 +4,7 @@ import type { GoalType, Supplement } from '@/types';
  * A small starter library of well-studied supplements used for local search and
  * as fallback analysis when the AI backend is not configured.
  */
-export const COMMON_SUPPLEMENTS: Array<Omit<Supplement, 'id'>> = [
+export const COMMON_SUPPLEMENTS: Omit<Supplement, 'id'>[] = [
   {
     name: 'Creatine Monohydrate',
     form: 'powder',

@@ -37,7 +37,7 @@ interface Draft {
   dietaryPreferences: string[];
 }
 
-const GOALS: Array<{ value: GoalType; icon: keyof typeof Ionicons.glyphMap; blurb: string }> = [
+const GOALS: { value: GoalType; icon: keyof typeof Ionicons.glyphMap; blurb: string }[] = [
   { value: 'lose_fat', icon: 'flame', blurb: 'Lean out and drop body fat sustainably' },
   { value: 'build_muscle', icon: 'barbell', blurb: 'Add strength and muscle — get buff' },
   { value: 'recomp', icon: 'sync', blurb: 'Lose fat and build muscle at once' },
@@ -45,7 +45,7 @@ const GOALS: Array<{ value: GoalType; icon: keyof typeof Ionicons.glyphMap; blur
   { value: 'endurance', icon: 'bicycle', blurb: 'Improve cardio and stamina' },
 ];
 
-const ACTIVITY_LEVELS: Array<{ value: ActivityLevel; label: string; blurb: string }> = [
+const ACTIVITY_LEVELS: { value: ActivityLevel; label: string; blurb: string }[] = [
   { value: 'sedentary', label: 'Sedentary', blurb: 'Desk job, little exercise' },
   { value: 'light', label: 'Lightly active', blurb: 'Light exercise 1–3 days/wk' },
   { value: 'moderate', label: 'Moderately active', blurb: 'Exercise 3–5 days/wk' },
@@ -53,7 +53,7 @@ const ACTIVITY_LEVELS: Array<{ value: ActivityLevel; label: string; blurb: strin
   { value: 'athlete', label: 'Athlete', blurb: 'Training twice a day' },
 ];
 
-const LIFESTYLE: Array<{ value: LifestyleTag; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
+const LIFESTYLE: { value: LifestyleTag; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { value: 'busy_job', label: 'Busy job', icon: 'briefcase' },
   { value: 'kids', label: 'Kids at home', icon: 'people' },
   { value: 'travel', label: 'Travel often', icon: 'airplane' },

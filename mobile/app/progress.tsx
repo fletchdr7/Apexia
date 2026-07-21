@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Button, Card, Chip, EmptyState, SectionHeader, Sparkline, Text } from '@/components';
+import { Card, EmptyState, SectionHeader, Sparkline, Text } from '@/components';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import { relativeDay } from '@/utils/date';

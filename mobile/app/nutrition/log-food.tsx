@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, Card, Chip, Input, Text } from '@/components';
@@ -39,14 +39,8 @@ export default function LogFood() {
       return;
     }
     const q = name.trim();
-    if (q.length < 2) {
-      setResults([]);
-      setNoResults(false);
-      return;
-    }
+    if (q.length < 2) return;
     const ctrl = new AbortController();
-    setSearching(true);
-    setNoResults(false);
     const timer = setTimeout(async () => {
       try {
         const r = await searchFoods(q, ctrl.signal);
@@ -124,6 +118,12 @@ export default function LogFood() {
           onChangeText={(t) => {
             setName(t);
             setBasisNote(null);
+            const searchable = t.trim().length >= 2;
+            setSearching(searchable);
+            setNoResults(false);
+            if (!searchable) {
+              setResults([]);
+            }
           }}
           hint="We'll auto-fill the nutrition — you can edit it after."
         />

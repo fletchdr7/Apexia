@@ -15,7 +15,6 @@ on:
   push:
     branches:
       - main
-      - cursor/apexia-fitness-app-foundation-e8c8
     paths:
       # Only publish an OTA update when the app itself changes (saves CI minutes
       # and avoids redundant updates). Use "Run workflow" to force a publish.

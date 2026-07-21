@@ -11,8 +11,6 @@ import { analyzeBodyScan, type BodyScanContext } from '@/lib/api';
 import { useAppStore } from '@/store/AppStore';
 import { useTheme } from '@/theme';
 import type { BodyScanResult } from '@/types';
-import { relativeDay } from '@/utils/date';
-import { exerciseKey } from '@/utils/strength';
 
 type Pose = 'front' | 'side' | 'back';
 type Photo = { uri: string; base64: string };
@@ -33,6 +31,7 @@ export default function BodyScan() {
   const [photos, setPhotos] = useState<Partial<Record<Pose, Photo>>>({});
   const [phase, setPhase] = useState<Phase>('capture');
   const [result, setResult] = useState<BodyScanResult | null>(bodyScans[0]?.result ?? null);
+  const [now] = useState(() => Date.now());
 
   const hasAnyPhoto = Object.values(photos).some(Boolean);
 
@@ -75,12 +74,12 @@ export default function BodyScan() {
       .sort((a, b) => (b.bestWeightKg ?? 0) - (a.bestWeightKg ?? 0))
       .slice(0, 6)
       .map((r) => ({ name: r.name, bestKg: r.bestWeightKg, sessions: r.sessions }));
-    const cutoff = Date.now() - 30 * 86_400_000;
+    const cutoff = now - 30 * 86_400_000;
     const workoutsLast30 = workouts.filter((w) => new Date(w.performedAt).getTime() >= cutoff).length;
 
     // avg calories/protein over the last 7 days that have entries
     const days = new Map<string, { cal: number; pro: number }>();
-    const since = Date.now() - 7 * 86_400_000;
+    const since = now - 7 * 86_400_000;
     for (const f of foods) {
       if (new Date(f.loggedAt).getTime() < since) continue;
       const key = f.loggedAt.slice(0, 10);
@@ -110,7 +109,7 @@ export default function BodyScan() {
       nutritionAvg,
       equipment: [...allEquip.filter((e) => ids.has(e.id)).map((e) => e.name), ...catalogNames],
     };
-  }, [weightLogs, profile, exerciseHistory, workouts, foods, gymEquipmentIds, homeEquipmentIds, customEquipment]);
+  }, [weightLogs, profile, exerciseHistory, workouts, foods, gymEquipmentIds, homeEquipmentIds, customEquipment, now]);
 
   const analyze = async () => {
     setPhase('analyzing');

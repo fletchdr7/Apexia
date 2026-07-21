@@ -42,12 +42,8 @@ export default function WorkoutSession() {
   const [rest, setRest] = useState<number | null>(null);
 
   useEffect(() => {
-    if (rest === null) return;
-    if (rest <= 0) {
-      setRest(null);
-      return;
-    }
-    const t = setTimeout(() => setRest((r) => (r === null ? null : r - 1)), 1000);
+    if (rest === null || rest <= 0) return;
+    const t = setTimeout(() => setRest((r) => (r === null || r <= 1 ? null : r - 1)), 1000);
     return () => clearTimeout(t);
   }, [rest]);
 

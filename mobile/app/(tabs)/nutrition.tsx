@@ -9,7 +9,7 @@ import type { FoodEntry, FrequentFood, MealSlot } from '@/types';
 import { dateKeyOf, timeLabel } from '@/utils/date';
 import { doseServings, supplementHasMacros, supplementNutrients } from '@/utils/nutrition';
 
-const SLOTS: Array<{ slot: MealSlot; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
+const SLOTS: { slot: MealSlot; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { slot: 'breakfast', label: 'Breakfast', icon: 'sunny' },
   { slot: 'lunch', label: 'Lunch', icon: 'partly-sunny' },
   { slot: 'dinner', label: 'Dinner', icon: 'moon' },

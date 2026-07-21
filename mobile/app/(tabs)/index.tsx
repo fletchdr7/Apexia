@@ -28,7 +28,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (healthEnabled) getTodayHealth().then(setHealth).catch(() => undefined);
-    else setHealth(null);
   }, [healthEnabled]);
 
   const nutrition = todaysNutrition();
@@ -250,7 +249,6 @@ function QuickAction({
   tint: string;
   onPress: () => void;
 }) {
-  const theme = useTheme();
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.quickItem, { opacity: pressed ? 0.8 : 1 }]}>
       <View style={[styles.quickIcon, { backgroundColor: tint + '22' }]}>
@@ -322,4 +320,3 @@ const styles = StyleSheet.create({
   progressTrack: { height: 8, borderRadius: 999, marginTop: 12, overflow: 'hidden' },
   progressFill: { height: 8, borderRadius: 999 },
 });
-

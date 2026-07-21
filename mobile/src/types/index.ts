@@ -294,7 +294,7 @@ export interface CoachPlan {
 /** AI food-scan result returned by the vision endpoint. */
 export interface FoodScanResult {
   name: string;
-  items: Array<{ name: string; portion: string; nutrients: Nutrients }>;
+  items: { name: string; portion: string; nutrients: Nutrients }[];
   total: Nutrients;
   confidence: number;
   notes?: string;

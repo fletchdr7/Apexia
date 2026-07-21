@@ -197,7 +197,7 @@ export default function ScanFood() {
           </>
         ) : (
           <Card>
-            <Text variant="subtitle">Couldn't analyze that</Text>
+            <Text variant="subtitle">Could not analyze that</Text>
             <Text color="textMuted" style={{ marginTop: 6 }}>
               Try again with better lighting, or log it manually.
             </Text>
